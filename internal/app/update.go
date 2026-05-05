@@ -828,6 +828,7 @@ func (m *Model) handleFrame(f conn.Frame) tea.Cmd {
 	case "chat:tool":
 		var v proto.ChatTool
 		_ = json.Unmarshal(f.Raw, &v)
+		m.endStream()
 		n := v.Name
 		if n == "" {
 			n = v.Tool
@@ -1151,6 +1152,7 @@ func (m *Model) handleStatus(v proto.ChatStatus) {
 		// the chat clean was an explicit user ask.
 		m.thinkingBuf = ""
 	case "tool_exec_start":
+		m.endStream()
 		m.status = fmt.Sprintf("⚙ %s %s", v.Tool, v.Detail)
 		if v.Tool != "" {
 			m.appendToolExec(v.Tool, v.Detail)

@@ -607,6 +607,7 @@ func (m *Model) endStream() {
 			idx := m.currentStreamIdx
 			m.messages = append(m.messages[:idx], m.messages[idx+1:]...)
 		} else {
+			msg.Text = text
 			msg.Streaming = false
 			if m.writer != nil {
 				m.writer.WriteAssistant(text, nil, 0)

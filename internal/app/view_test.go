@@ -3,15 +3,28 @@ package app
 import (
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/bubbles/viewport"
+
+	"github.com/yumlevi/spore-code/internal/proto"
 )
 
-func TestBottomAlignContentPadsShortTranscript(t *testing.T) {
-	got := bottomAlignContent("hello", 4)
-	if strings.Count(got, "\n")+1 != 4 {
-		t.Fatalf("expected 4 display lines, got %q", got)
+func TestRerenderViewportDoesNotTopPadShortTranscript(t *testing.T) {
+	m := &Model{
+		messages:         []chatMsg{{Role: "system", Text: "hello"}},
+		currentStreamIdx: -1,
+		viewport:         viewport.New(40, 5),
+		theme:            themeDark,
+		historyDirty:     true,
+		followBottom:     true,
 	}
-	if !strings.HasSuffix(got, "hello") {
-		t.Fatalf("expected content at bottom, got %q", got)
+	m.viewport.Width = 40
+	m.viewport.Height = 5
+
+	m.rerenderViewport()
+
+	if got := m.viewport.View(); strings.HasPrefix(got, "\n") {
+		t.Fatalf("expected transcript to start at top without artificial padding, got %q", got)
 	}
 }
 
@@ -25,5 +38,33 @@ func TestAppendDeltaIgnoresLeadingWhitespaceOnlyChunk(t *testing.T) {
 	m.appendDelta("hello")
 	if m.currentStreamIdx != 0 || len(m.messages) != 1 || m.messages[0].Text != "hello" {
 		t.Fatalf("expected stream to start on visible text, idx=%d messages=%#v", m.currentStreamIdx, m.messages)
+	}
+}
+
+func TestEndStreamTrimsTrailingWhitespace(t *testing.T) {
+	m := &Model{currentStreamIdx: -1}
+	m.appendDelta("first answer\n\n")
+	m.endStream()
+
+	if got := m.messages[0].Text; got != "first answer" {
+		t.Fatalf("expected trimmed assistant text, got %q", got)
+	}
+}
+
+func TestToolExecStartClosesAssistantSegment(t *testing.T) {
+	m := &Model{currentStreamIdx: -1}
+	m.appendDelta("before tool")
+	m.handleStatus(proto.ChatStatus{Status: "tool_exec_start", Tool: "exec", Detail: "pwd"})
+
+	if m.currentStreamIdx != -1 {
+		t.Fatalf("expected tool start to close stream, idx=%d", m.currentStreamIdx)
+	}
+	if len(m.messages) != 1 || m.messages[0].Streaming || m.messages[0].Text != "before tool" {
+		t.Fatalf("expected completed first segment, messages=%#v", m.messages)
+	}
+
+	m.appendDelta("after tool")
+	if len(m.messages) != 2 || m.messages[1].Text != "after tool" {
+		t.Fatalf("expected new segment after tool, messages=%#v", m.messages)
 	}
 }
