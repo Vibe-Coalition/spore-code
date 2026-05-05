@@ -167,6 +167,8 @@ func (m *Model) announceSessionStart() {
 		"userName":       m.cfg.Connection.User,
 		"cwd":            m.cwd,
 		"startedAt":      time.Now().UTC().Format(time.RFC3339),
+		"clientVersion":  Version,
+		"localTools":     pc.LocalTools,
 		"projectContext": pc,
 	})
 }

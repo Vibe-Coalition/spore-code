@@ -20,6 +20,12 @@ const (
 // alwaysSafe — never need approval.
 var alwaysSafe = map[string]bool{
 	"read_file": true, "glob": true, "grep": true,
+	"list_dir": true, "read_many_files": true,
+	"git_status": true, "git_diff": true,
+	"bg_list": true, "bg_tail": true,
+	"search_symbols": true, "get_snippet": true, "architecture": true,
+	"trace_calls": true, "impact": true, "verify_implementation": true,
+	"code_overview": true, "trace_path": true, "code_diff": true,
 }
 
 // dangerousPatterns — require approval even in auto. Mirrors
@@ -82,9 +88,16 @@ func Summarize(name string, input map[string]any) string {
 			c = c[:120] + "…"
 		}
 		return c
-	case "write_file", "edit_file", "read_file":
+	case "write_file", "edit_file", "read_file", "list_dir", "git_status", "git_diff", "patch_file", "run_tests":
 		p, _ := input["path"].(string)
+		if p == "" {
+			p, _ = input["file"].(string)
+		}
 		return p
+	case "read_many_files":
+		return fmt.Sprintf("%v", input["paths"])
+	case "bg_tail", "bg_kill":
+		return fmt.Sprintf("#%v", input["id"])
 	case "web_fetch":
 		u, _ := input["url"].(string)
 		if len(u) > 100 {
@@ -113,12 +126,22 @@ func MakeRule(name string, input map[string]any) string {
 			return "exec:*"
 		}
 		return "exec:" + first + "*"
-	case "write_file", "edit_file":
+	case "write_file", "edit_file", "patch_file":
 		p, _ := input["path"].(string)
 		if i := strings.LastIndex(p, "/"); i >= 0 {
 			return name + ":" + p[:i] + "/*"
 		}
 		return name + ":*"
+	case "run_tests":
+		c, _ := input["command"].(string)
+		if c == "" {
+			return "run_tests:*"
+		}
+		parts := strings.Fields(strings.TrimSpace(c))
+		if len(parts) == 0 {
+			return "run_tests:*"
+		}
+		return "run_tests:" + parts[0] + "*"
 	}
 	return name + ":*"
 }
@@ -152,13 +175,20 @@ func MatchesRule(rule, name string, input map[string]any) bool {
 			return first == strings.TrimRight(prefix, " ")
 		}
 		return strings.HasPrefix(cmd, pat)
-	case "write_file", "edit_file":
+	case "write_file", "edit_file", "patch_file":
 		p, _ := input["path"].(string)
 		if strings.HasSuffix(pat, "/*") {
 			dir := strings.TrimSuffix(pat, "/*")
 			return strings.HasPrefix(p, dir+"/")
 		}
 		return strings.HasPrefix(p, pat)
+	case "run_tests":
+		cmd, _ := input["command"].(string)
+		cmd = strings.TrimSpace(cmd)
+		if strings.HasSuffix(pat, "*") {
+			return strings.HasPrefix(cmd, strings.TrimSuffix(pat, "*"))
+		}
+		return strings.HasPrefix(cmd, pat)
 	}
 	return false
 }

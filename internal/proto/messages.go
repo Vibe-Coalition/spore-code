@@ -116,6 +116,7 @@ type ProjectContext struct {
 	SporeMd     string   `json:"sporeMd,omitempty"`     // SPORE.md contents, capped at 4KB
 	Tree        []string `json:"tree,omitempty"`        // depth-2 paths only, no contents
 	Tools       []string `json:"tools,omitempty"`       // ["node", "go", "git", ...]
+	LocalTools  []string `json:"localTools,omitempty"`  // callable tools this binary can execute locally
 	Mode        string   `json:"mode,omitempty"`        // "plan" | "execute" — replaces PlanPrefix glue
 	OS          string   `json:"os,omitempty"`          // runtime.GOOS
 	Arch        string   `json:"arch,omitempty"`        // runtime.GOARCH
@@ -207,6 +208,8 @@ type SessionStart struct {
 	UserName       string          `json:"userName,omitempty"`
 	Cwd            string          `json:"cwd,omitempty"`
 	StartedAt      string          `json:"startedAt"` // RFC3339
+	ClientVersion  string          `json:"clientVersion,omitempty"`
+	LocalTools     []string        `json:"localTools,omitempty"`
 	ProjectContext *ProjectContext `json:"projectContext,omitempty"`
 }
 

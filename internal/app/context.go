@@ -14,6 +14,7 @@ import (
 
 	"github.com/yumlevi/spore-code/internal/codeindex"
 	"github.com/yumlevi/spore-code/internal/proto"
+	localtools "github.com/yumlevi/spore-code/internal/tools"
 )
 
 // BuildProjectContext returns the structured project metadata that gets
@@ -41,12 +42,13 @@ func BuildProjectContextWithScope(cwd, mode, scope string) proto.ProjectContext 
 		root = gitRoot
 	}
 	pc := proto.ProjectContext{
-		Cwd:     cwd,
-		Project: project,
-		Mode:    mode,
-		Scope:   scope,
-		OS:      runtime.GOOS,
-		Arch:    runtime.GOARCH,
+		Cwd:        cwd,
+		Project:    project,
+		Mode:       mode,
+		Scope:      scope,
+		OS:         runtime.GOOS,
+		Arch:       runtime.GOARCH,
+		LocalTools: localtools.LocalToolNames(),
 	}
 	if gitRoot != "" {
 		pc.GitBranch = gitBranch(cwd)

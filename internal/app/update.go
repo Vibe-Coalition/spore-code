@@ -124,6 +124,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			"userName":       m.cfg.Connection.User,
 			"cwd":            m.cwd,
 			"startedAt":      time.Now().UTC().Format(time.RFC3339),
+			"clientVersion":  Version,
+			"localTools":     pc.LocalTools,
 			"projectContext": pc,
 		})
 		// codeindex auto-bootstrap — when the cwd has no index yet,

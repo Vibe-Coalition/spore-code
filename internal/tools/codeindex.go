@@ -47,10 +47,11 @@ type IndexProgressFn func(IndexProgress)
 // before re-insert so a re-run produces a clean state.
 //
 // Input fields:
-//   roots: []string         — optional sub-directories to constrain the walk; defaults to cwd
-//   languages: []string     — filter (e.g. ["go", "ts"]); default is all supported
-//   max_files: int          — safety cap; 0 = unlimited
-//   force: bool             — re-index everything even if mtime unchanged
+//
+//	roots: []string         — optional sub-directories to constrain the walk; defaults to cwd
+//	languages: []string     — filter (e.g. ["go", "ts"]); default is all supported
+//	max_files: int          — safety cap; 0 = unlimited
+//	force: bool             — re-index everything even if mtime unchanged
 func IndexCodebase(input map[string]any, cwd string) any {
 	return IndexCodebaseWithProgress(input, cwd, nil)
 }
@@ -299,13 +300,14 @@ func IndexCodebaseWithProgress(input map[string]any, cwd string, onProgress Inde
 // most grep+read_file pairs in plan-mode Phase 2.
 //
 // Input fields:
-//   name:        string   — case-insensitive substring match against symbol.name
-//   qname:       string   — substring match against symbol.qname
-//   kind:        string   — exact match (function, method, class, struct, interface, type, const, var, enum, constructor)
-//   file:        string   — LIKE pattern over file path
-//   language:    string   — go | ts | js | py | rs
-//   exported:    bool     — restrict to exported symbols
-//   limit:       int      — default 200, hard cap returned
+//
+//	name:        string   — case-insensitive substring match against symbol.name
+//	qname:       string   — substring match against symbol.qname
+//	kind:        string   — exact match (function, method, class, struct, interface, type, const, var, enum, constructor)
+//	file:        string   — LIKE pattern over file path
+//	language:    string   — go | ts | js | py | rs
+//	exported:    bool     — restrict to exported symbols
+//	limit:       int      — default 200, hard cap returned
 func SearchSymbols(input map[string]any, cwd string) any {
 	refreshed, oldHead, newHead := ensureIndexFresh(cwd)
 	store, err := codeindex.Open(cwd)
@@ -365,12 +367,14 @@ func SearchSymbols(input map[string]any, cwd string) any {
 // GetSnippet returns the source body for a symbol or a file:line range.
 //
 // Input fields (one form):
-//   qname:       string — symbol's qualified name (preferred)
+//
+//	qname:       string — symbol's qualified name (preferred)
 //
 // Input fields (alternate form):
-//   file:        string — repo-relative path
-//   start_line:  int
-//   end_line:    int
+//
+//	file:        string — repo-relative path
+//	start_line:  int
+//	end_line:    int
 func GetSnippet(input map[string]any, cwd string) any {
 	refreshed, oldHead, newHead := ensureIndexFresh(cwd)
 	store, err := codeindex.Open(cwd)
@@ -466,11 +470,12 @@ const MaxTraceCallsEdges = 200
 // reconstructs paths or asks again with a tighter depth.
 //
 // Input fields:
-//   name:       string — matches callee_name (works regardless of qname resolution)
-//   qname:      string — exact callee/caller match (preferred when known)
-//   direction:  callers | callees | both (default: callers)
-//   depth:      1..5 (default: 3)
-//   limit:      total edge cap; default and max 200
+//
+//	name:       string — matches callee_name (works regardless of qname resolution)
+//	qname:      string — exact callee/caller match (preferred when known)
+//	direction:  callers | callees | both (default: callers)
+//	depth:      1..5 (default: 3)
+//	limit:      total edge cap; default and max 200
 func TraceCalls(input map[string]any, cwd string) any {
 	refreshed, oldHead, newHead := ensureIndexFresh(cwd)
 	store, err := codeindex.Open(cwd)
@@ -640,9 +645,10 @@ func TraceCalls(input map[string]any, cwd string) any {
 // "what could a change in this file break?" in token-cheap form.
 //
 // Input fields:
-//   paths:     []string — repo-relative; default: `git diff --name-only HEAD`
-//   depth:     1..3 (default: 2) — caller transitive depth
-//   limit:     total symbol cap (default 100)
+//
+//	paths:     []string — repo-relative; default: `git diff --name-only HEAD`
+//	depth:     1..3 (default: 2) — caller transitive depth
+//	limit:     total symbol cap (default 100)
 func Impact(input map[string]any, cwd string) any {
 	refreshed, oldHead, newHead := ensureIndexFresh(cwd)
 	store, err := codeindex.Open(cwd)
@@ -732,6 +738,155 @@ func Impact(input map[string]any, cwd string) any {
 		"affected_symbols": out,
 		"total_callers":    totalCallers,
 	}
+	if note := freshnessNote(refreshed, oldHead, newHead); note != nil {
+		r["index_refreshed"] = note
+	}
+	return r
+}
+
+func CodeOverview(input map[string]any, cwd string) any {
+	topN := asInt(input["top_n"], 8)
+	if topN <= 0 {
+		topN = 8
+	}
+	if topN > 20 {
+		topN = 20
+	}
+	archAny := Architecture(map[string]any{}, cwd)
+	arch, _ := archAny.(map[string]any)
+	if arch == nil || arch["ok"] != true {
+		return archAny
+	}
+	questions := []string{
+		"Which cluster owns the change requested by the user?",
+		"Does the target symbol appear in hot_paths or have many callers?",
+		"Do cross-directory calls imply a shared abstraction should be reused?",
+	}
+	topSymbols := arch["hot_paths"]
+	if hp, ok := topSymbols.([]codeindex.HotSymbol); ok && len(hp) > topN {
+		topSymbols = hp[:topN]
+	}
+	return map[string]any{
+		"ok":                    true,
+		"index_head":            arch["index_head"],
+		"stats":                 arch["stats"],
+		"tech_stack":            arch["tech_stack"],
+		"clusters":              arch["clusters"],
+		"top_n":                 topN,
+		"top_symbols":           topSymbols,
+		"surprising_calls":      []any{},
+		"communities":           arch["clusters"],
+		"orientation_questions": questions,
+		"note":                  "code_overview is computed from the local code index; surprising_calls are reserved for richer community detection.",
+	}
+}
+
+func TracePath(input map[string]any, cwd string) any {
+	refreshed, oldHead, newHead := ensureIndexFresh(cwd)
+	store, err := codeindex.Open(cwd)
+	if err != nil {
+		return errMap("open index: " + err.Error())
+	}
+	defer store.Close()
+	from := asString(input["from_qname"], "")
+	to := asString(input["to_qname"], "")
+	if from == "" || to == "" {
+		return errMap("from_qname and to_qname are required")
+	}
+	maxHops := asInt(input["max_hops"], 8)
+	if maxHops <= 0 {
+		maxHops = 8
+	}
+	if maxHops > 20 {
+		maxHops = 20
+	}
+	type item struct {
+		QName string
+		Path  []map[string]any
+	}
+	queue := []item{{QName: from, Path: []map[string]any{{"qname": from, "depth": 0}}}}
+	seen := map[string]bool{from: true}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		depth := len(cur.Path) - 1
+		if depth >= maxHops {
+			continue
+		}
+		edges, err := store.CalleesOf(cur.QName)
+		if err != nil {
+			continue
+		}
+		for _, e := range edges {
+			next := e.CalleeQName
+			if next == "" {
+				continue
+			}
+			step := map[string]any{"qname": next, "from": e.CallerQName, "line": e.Line, "depth": depth + 1}
+			nextPath := append(append([]map[string]any{}, cur.Path...), step)
+			if next == to {
+				r := map[string]any{"ok": true, "from_qname": from, "to_qname": to, "hops": len(nextPath) - 1, "path": nextPath}
+				if note := freshnessNote(refreshed, oldHead, newHead); note != nil {
+					r["index_refreshed"] = note
+				}
+				return r
+			}
+			if !seen[next] {
+				seen[next] = true
+				queue = append(queue, item{QName: next, Path: nextPath})
+			}
+		}
+	}
+	return map[string]any{"ok": false, "from_qname": from, "to_qname": to, "max_hops": maxHops, "error": "no call path found"}
+}
+
+func CodeDiff(input map[string]any, cwd string) any {
+	refreshed, oldHead, newHead := ensureIndexFresh(cwd)
+	store, err := codeindex.Open(cwd)
+	if err != nil {
+		return errMap("open index: " + err.Error())
+	}
+	defer store.Close()
+	from := asString(input["from_ref"], "HEAD~1")
+	to := asString(input["to_ref"], "HEAD")
+	limit := asInt(input["limit"], 50)
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	out, exit, err := runCmdArgs(cwd, 60000, "git", "diff", "--name-only", from, to)
+	if err != nil {
+		return map[string]any{"ok": false, "exit": exit, "error": err.Error(), "output": truncateOutput(out, 12000)}
+	}
+	var files []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			files = append(files, line)
+		}
+	}
+	changed := make([]map[string]any, 0)
+	for _, f := range files {
+		syms, err := store.Search(codeindex.SearchQuery{FileLike: f, Limit: limit})
+		if err != nil {
+			continue
+		}
+		for _, s := range syms {
+			changed = append(changed, map[string]any{
+				"qname": s.QName, "name": s.Name, "kind": s.Kind,
+				"file": s.File, "line": s.StartLine, "signature": s.Signature,
+			})
+			if len(changed) >= limit {
+				break
+			}
+		}
+		if len(changed) >= limit {
+			break
+		}
+	}
+	r := map[string]any{"ok": true, "from_ref": from, "to_ref": to, "files": files, "changed_symbols": changed, "truncated": len(changed) >= limit}
 	if note := freshnessNote(refreshed, oldHead, newHead); note != nil {
 		r["index_refreshed"] = note
 	}
@@ -970,9 +1125,9 @@ func freshnessNote(refreshed bool, oldHead, newHead string) map[string]any {
 		return nil
 	}
 	return map[string]any{
-		"refreshed":  true,
-		"old_head":   oldHead,
-		"new_head":   newHead,
-		"reason":     "git HEAD changed since last index — auto-reindexed before answering",
+		"refreshed": true,
+		"old_head":  oldHead,
+		"new_head":  newHead,
+		"reason":    "git HEAD changed since last index — auto-reindexed before answering",
 	}
 }

@@ -3,14 +3,16 @@ package tools
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
 	"github.com/yumlevi/spore-code/internal/bg"
 )
 
-// Server-side tools: we must NOT claim these; signal fallback by returning
-// nil from Execute and the caller sends no tool:result (server executes).
+// Server-side tools: we must NOT claim these. Execute returns (nil, false);
+// the app still sends tool:result with result=null so the server falls back
+// immediately instead of waiting for a local execution that will never happen.
 var serverTools = map[string]bool{
 	"graph_query": true, "graph_update": true, "graph_delete": true, "query_about": true,
 	"message_send": true, "message_react": true, "message_edit": true, "message_read": true,
@@ -54,6 +56,31 @@ var localTools = map[string]bool{
 	// check (exists → substantive → wired → export-level), powered
 	// by the existing per-project SQLite index + symbol body reads.
 	"verify_implementation": true,
+
+	// General structured tools mirrored by the SPORE core catalog.
+	"list_dir":        true,
+	"read_many_files": true,
+	"git_status":      true,
+	"git_diff":        true,
+	"patch_file":      true,
+	"run_tests":       true,
+	"bg_list":         true,
+	"bg_tail":         true,
+	"bg_kill":         true,
+
+	// codeindex graph analytics.
+	"code_overview": true,
+	"trace_path":    true,
+	"code_diff":     true,
+}
+
+func LocalToolNames() []string {
+	names := make([]string, 0, len(localTools))
+	for name := range localTools {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // DelegationMode controls what the agent may delegate via delegate_task.
@@ -207,6 +234,24 @@ func (e *Executor) Execute(name string, inputRaw json.RawMessage) (result any, c
 		return Grep(input, e.CWD), true
 	case "exec":
 		return Exec(input, e.CWD, e.LogDir, e.BG, e.Hooks.OnExecLine), true
+	case "list_dir":
+		return ListDir(input, e.CWD, e.Scope), true
+	case "read_many_files":
+		return ReadManyFiles(input, e.CWD, e.Scope), true
+	case "git_status":
+		return GitStatus(input, e.CWD, e.Scope), true
+	case "git_diff":
+		return GitDiff(input, e.CWD, e.Scope), true
+	case "patch_file":
+		return PatchFile(input, e.CWD, e.Scope), true
+	case "run_tests":
+		return RunTests(input, e.CWD, e.LogDir, e.BG, e.Hooks.OnExecLine, e.Scope), true
+	case "bg_list":
+		return BgList(e.BG), true
+	case "bg_tail":
+		return BgTail(input, e.BG), true
+	case "bg_kill":
+		return BgKill(input, e.BG), true
 
 	// codeindex (M1)
 	case "index_codebase":
@@ -225,6 +270,12 @@ func (e *Executor) Execute(name string, inputRaw json.RawMessage) (result any, c
 		return Impact(input, e.CWD), true
 	case "verify_implementation":
 		return VerifyImplementation(input, e.CWD), true
+	case "code_overview":
+		return CodeOverview(input, e.CWD), true
+	case "trace_path":
+		return TracePath(input, e.CWD), true
+	case "code_diff":
+		return CodeDiff(input, e.CWD), true
 	}
 	return nil, false
 }
