@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -21,6 +23,10 @@ type inputTextFlushMsg struct {
 var fileURIRe = regexp.MustCompile(`file://[^\s"'<>]+`)
 
 func (m *Model) handleTextInputKey(km tea.KeyMsg) (tea.Cmd, bool) {
+	if m.bufferedPasteNewline(km) {
+		return m.queueInputText("\n", true), true
+	}
+
 	if km.Paste {
 		if text := keyText(km); text != "" {
 			m.flushPendingInputText()
@@ -33,7 +39,14 @@ func (m *Model) handleTextInputKey(km tea.KeyMsg) (tea.Cmd, bool) {
 	if text == "" {
 		return nil, false
 	}
-	return m.queueInputText(text), true
+	return m.queueInputText(text, len([]rune(text)) > 1), true
+}
+
+func (m *Model) bufferedPasteNewline(km tea.KeyMsg) bool {
+	if km.Alt || len(m.inputBurst) == 0 || !m.inputBurstScheduled {
+		return false
+	}
+	return km.Type == tea.KeyEnter || km.Type == tea.KeyCtrlJ
 }
 
 func keyText(km tea.KeyMsg) string {
@@ -53,11 +66,14 @@ func keyText(km tea.KeyMsg) string {
 	}
 }
 
-func (m *Model) queueInputText(text string) tea.Cmd {
+func (m *Model) queueInputText(text string, normalize bool) tea.Cmd {
 	if text == "" {
 		return nil
 	}
 	m.inputBurst = append(m.inputBurst, []rune(text)...)
+	if normalize {
+		m.inputBurstNormalize = true
+	}
 	if m.inputBurstScheduled {
 		return nil
 	}
@@ -73,11 +89,16 @@ func (m *Model) queueInputText(text string) tea.Cmd {
 func (m *Model) flushPendingInputText() {
 	if len(m.inputBurst) == 0 {
 		m.inputBurstScheduled = false
+		m.inputBurstNormalize = false
 		return
 	}
-	text := normalizePastedInput(string(m.inputBurst), m.cwd)
+	text := string(m.inputBurst)
+	if m.inputBurstNormalize || len(m.inputBurst) >= 16 {
+		text = normalizePastedInput(text, m.cwd)
+	}
 	m.inputBurst = nil
 	m.inputBurstScheduled = false
+	m.inputBurstNormalize = false
 	m.insertInputText(text)
 }
 
@@ -95,7 +116,7 @@ func normalizePastedInput(raw, cwd string) string {
 	s := strings.ReplaceAll(raw, "\r\n", "\n")
 	s = strings.ReplaceAll(s, "\r", "\n")
 	if paths, ok := droppedPathFields(s, cwd); ok {
-		return strings.Join(paths, "\n")
+		return strings.Join(materializeDroppedPaths(paths, cwd), "\n")
 	}
 	s = fileURIRe.ReplaceAllStringFunc(s, func(token string) string {
 		path, ok := fileURIToPath(token)
@@ -143,6 +164,154 @@ func fileURIToPath(token string) (string, bool) {
 		return strings.TrimPrefix(path, "/"), true
 	}
 	return path, true
+}
+
+func materializeDroppedPaths(paths []string, cwd string) []string {
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		out = append(out, materializeDroppedPath(p, cwd))
+	}
+	return out
+}
+
+func materializeDroppedPath(path, cwd string) string {
+	resolved := expandHome(path)
+	info, err := os.Stat(resolved)
+	if err != nil || info.IsDir() {
+		return path
+	}
+	label := "file"
+	if isImagePath(resolved) {
+		label = "image"
+	}
+	usable := usablePathForAgent(resolved, cwd)
+	if usable == "" && cwd != "" {
+		if rel, err := copyDroppedFileIntoProject(resolved, cwd); err == nil {
+			usable = rel
+		}
+	}
+	if usable == "" {
+		usable = path
+	}
+	return fmt.Sprintf("Attached %s: %s", label, filepath.ToSlash(usable))
+}
+
+func usablePathForAgent(path, cwd string) string {
+	if cwd == "" {
+		return ""
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return ""
+	}
+	root, err := filepath.Abs(cwd)
+	if err != nil {
+		return ""
+	}
+	rel, err := filepath.Rel(root, abs)
+	if err != nil || rel == "." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || rel == ".." || filepath.IsAbs(rel) {
+		return ""
+	}
+	return filepath.ToSlash(rel)
+}
+
+func copyDroppedFileIntoProject(src, cwd string) (string, error) {
+	const maxAttachmentBytes int64 = 50 * 1024 * 1024
+	info, err := os.Stat(src)
+	if err != nil {
+		return "", err
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("cannot attach directory")
+	}
+	if info.Size() > maxAttachmentBytes {
+		return "", fmt.Errorf("attachment too large")
+	}
+	dir := filepath.Join(cwd, ".spore-code", "attachments")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	dst := uniqueAttachmentPath(dir, filepath.Base(src))
+	if err := copyFile(src, dst); err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(cwd, dst)
+	if err != nil {
+		return "", err
+	}
+	return filepath.ToSlash(rel), nil
+}
+
+func uniqueAttachmentPath(dir, base string) string {
+	base = safeAttachmentBase(base)
+	stem := strings.TrimSuffix(base, filepath.Ext(base))
+	ext := filepath.Ext(base)
+	for i := 0; ; i++ {
+		name := base
+		if i > 0 {
+			name = fmt.Sprintf("%s-%d%s", stem, i, ext)
+		}
+		path := filepath.Join(dir, name)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return path
+		}
+	}
+}
+
+func safeAttachmentBase(base string) string {
+	base = filepath.Base(base)
+	base = strings.TrimSpace(base)
+	if base == "." || base == "" {
+		return "attachment"
+	}
+	var b strings.Builder
+	for _, r := range base {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '.', r == '-', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('-')
+		}
+	}
+	clean := strings.Trim(b.String(), ".-")
+	if clean == "" {
+		return "attachment"
+	}
+	return clean
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return err
+	}
+	_, copyErr := io.Copy(out, in)
+	closeErr := out.Close()
+	if copyErr != nil {
+		_ = os.Remove(dst)
+		return copyErr
+	}
+	if closeErr != nil {
+		_ = os.Remove(dst)
+		return closeErr
+	}
+	return nil
+}
+
+func isImagePath(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif", ".svg":
+		return true
+	default:
+		return false
+	}
 }
 
 func shellLikeFields(s string) ([]string, bool) {

@@ -201,6 +201,7 @@ type Model struct {
 	inputBurst          []rune
 	inputBurstSeq       uint64
 	inputBurstScheduled bool
+	inputBurstNormalize bool
 }
 
 // SetProgram stores the reference so off-thread code can deliver messages.

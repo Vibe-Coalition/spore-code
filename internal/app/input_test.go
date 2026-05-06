@@ -30,7 +30,7 @@ func TestBracketedPasteInsertsImmediately(t *testing.T) {
 	}
 }
 
-func TestSlowPasteRunesFlushBeforeEnter(t *testing.T) {
+func TestTypedRunesFlushBeforeEnterSends(t *testing.T) {
 	m := inputTestModel(t)
 
 	next, _ := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
@@ -42,10 +42,45 @@ func TestSlowPasteRunesFlushBeforeEnter(t *testing.T) {
 		t.Fatalf("ordinary runes should be buffered before the timer flushes, got %q", got)
 	}
 
+	next, _ = m.Update(inputTextFlushMsg{seq: m.inputBurstSeq})
+	m = next.(*Model)
+	if got := m.input.Value(); got != "hi" {
+		t.Fatalf("timer flush did not insert typed text, got %q", got)
+	}
+
 	next, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(*Model)
 	if len(m.messages) == 0 || m.messages[len(m.messages)-1].Text != "hi" {
 		t.Fatalf("enter did not flush buffered text before send: %#v", m.messages)
+	}
+}
+
+func TestStreamedMultilinePasteDoesNotSubmitEachLine(t *testing.T) {
+	m := inputTestModel(t)
+
+	next, _ := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("first")})
+	m = next.(*Model)
+	next, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(*Model)
+	next, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("second")})
+	m = next.(*Model)
+	next, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(*Model)
+
+	if len(m.messages) != 0 {
+		t.Fatalf("streamed paste newlines should not submit messages: %#v", m.messages)
+	}
+
+	next, _ = m.Update(inputTextFlushMsg{seq: m.inputBurstSeq})
+	m = next.(*Model)
+	if got := m.input.Value(); got != "first\nsecond\n" {
+		t.Fatalf("streamed paste was not preserved as textarea content: %q", got)
+	}
+
+	next, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(*Model)
+	if len(m.messages) != 1 || m.messages[0].Text != "first\nsecond" {
+		t.Fatalf("final enter should submit one multiline message: %#v", m.messages)
 	}
 }
 
@@ -81,9 +116,38 @@ func TestShellQuotedFileDropNormalizesToNewlinePaths(t *testing.T) {
 
 	raw := "'" + first + "' \"" + second + "\""
 	got := normalizePastedInput(raw, dir)
-	want := strings.Join([]string{first, second}, "\n")
+	want := strings.Join([]string{
+		"Attached image: one image.png",
+		"Attached file: two.txt",
+	}, "\n")
 	if got != want {
 		t.Fatalf("drop normalization mismatch\nwant: %q\n got: %q", want, got)
+	}
+}
+
+func TestDroppedImageOutsideProjectCopiesToAttachment(t *testing.T) {
+	m := inputTestModel(t)
+	srcDir := t.TempDir()
+	src := filepath.Join(srcDir, "spore shot.png")
+	touchFile(t, src)
+
+	next, _ := m.updateKey(tea.KeyMsg{
+		Type:  tea.KeyRunes,
+		Runes: []rune(pathToFileURI(src)),
+		Paste: true,
+	})
+	got := next.(*Model)
+
+	prefix := "Attached image: "
+	if !strings.HasPrefix(got.input.Value(), prefix) {
+		t.Fatalf("expected attached image prompt, got %q", got.input.Value())
+	}
+	rel := strings.TrimPrefix(got.input.Value(), prefix)
+	if !strings.HasPrefix(rel, ".spore-code/attachments/") {
+		t.Fatalf("expected project-local attachment path, got %q", rel)
+	}
+	if _, err := os.Stat(filepath.Join(got.cwd, filepath.FromSlash(rel))); err != nil {
+		t.Fatalf("attachment was not copied into project: %v", err)
 	}
 }
 
@@ -136,4 +200,9 @@ func touchFile(t *testing.T, path string) {
 	if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
 		t.Fatalf("write temp file: %v", err)
 	}
+}
+
+func pathToFileURI(path string) string {
+	u := "file://" + filepath.ToSlash(path)
+	return strings.ReplaceAll(u, " ", "%20")
 }
