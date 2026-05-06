@@ -281,6 +281,27 @@ func backgroundOpen(bg lipgloss.Color) string {
 	return sample[:idx]
 }
 
+func foregroundOpen(fg lipgloss.Color) string {
+	raw := string(fg)
+	if strings.HasPrefix(raw, "#") && len(raw) == 7 {
+		r, rErr := strconv.ParseUint(raw[1:3], 16, 8)
+		g, gErr := strconv.ParseUint(raw[3:5], 16, 8)
+		b, bErr := strconv.ParseUint(raw[5:7], 16, 8)
+		if rErr == nil && gErr == nil && bErr == nil {
+			return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", r, g, b)
+		}
+	}
+	if n, err := strconv.Atoi(raw); err == nil && n >= 0 && n <= 255 {
+		return fmt.Sprintf("\x1b[38;5;%dm", n)
+	}
+	sample := lipgloss.NewStyle().Foreground(fg).Render("x")
+	idx := strings.Index(sample, "x")
+	if idx <= 0 {
+		return ""
+	}
+	return sample[:idx]
+}
+
 func clipRenderedLines(s string, maxLines int) string {
 	if maxLines <= 0 {
 		return ""
@@ -574,7 +595,7 @@ func (m *Model) renderHeader() string {
 	logoBox := lipgloss.NewStyle().
 		Foreground(m.theme.PlanLabelFg).Bold(true).
 		Background(m.theme.Accent).
-		Padding(0, 1).Render("🍄 spore " + Version)
+		Padding(0, 1).Render("spore code " + Version)
 
 	user := lipgloss.NewStyle().
 		Foreground(m.theme.PromptUser).Background(m.theme.BgPanel).Bold(true).
@@ -784,6 +805,9 @@ func renderMessage(c chatMsg, width int, t Theme) string {
 	if c.Role == "assistant" && !c.Streaming && strings.TrimSpace(c.Text) == "" {
 		return ""
 	}
+	if strings.TrimSpace(c.Text) == strings.TrimSpace(LogoFull) {
+		return renderLogoMessage(width, t)
+	}
 	if c.Role == "system" {
 		innerW := width - 2
 		if innerW < 4 {
@@ -861,6 +885,23 @@ func renderMessage(c chatMsg, width int, t Theme) string {
 		Width(width - 2).
 		Render(header + "\n" + content)
 	return box
+}
+
+func renderLogoMessage(width int, t Theme) string {
+	innerW := width - 2
+	if innerW < 1 {
+		innerW = width
+	}
+	open := foregroundOpen(t.Accent)
+	if open == "" {
+		open = lipgloss.NewStyle().Foreground(t.Accent).Bold(true).Render("")
+	}
+	lines := strings.Split(strings.Trim(LogoFull, "\n"), "\n")
+	for i, line := range lines {
+		line = strings.TrimRight(line, " ")
+		lines[i] = open + "\x1b[1m" + truncateCells(line, innerW) + "\x1b[0m"
+	}
+	return strings.Join(lines, "\n")
 }
 
 // wrapForPanel soft-wraps each line to at most w display cells wide,

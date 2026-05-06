@@ -248,7 +248,7 @@ func (m *Model) renderCodePanel(width, maxH int) string {
 		bodyLines = bodyLines[len(bodyLines)-bodyH:]
 	}
 	innerLines := append([]string{titleRow, ""}, bodyLines...)
-	return renderPanelFrame(width, maxH, m.theme.Accent2, innerLines)
+	return renderPanelFrame(width, maxH, m.theme.Accent, innerLines)
 }
 
 func renderPanelFrame(width, height int, borderColor lipgloss.Color, lines []string) string {

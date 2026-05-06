@@ -374,7 +374,7 @@ func applyTextareaTheme(input *textarea.Model, t Theme) {
 	input.FocusedStyle = focused
 	input.BlurredStyle = blurred
 	input.Cursor.Style = lipgloss.NewStyle().Foreground(t.BgInput).Background(t.Accent)
-	input.Cursor.TextStyle = lipgloss.NewStyle().Foreground(t.Fg).Background(t.BgInput)
+	input.Cursor.TextStyle = lipgloss.NewStyle().Foreground(t.Fg)
 	if input.Focused() {
 		_ = input.Focus()
 	} else {
@@ -383,12 +383,12 @@ func applyTextareaTheme(input *textarea.Model, t Theme) {
 }
 
 func textareaStylesForTheme(t Theme) (textarea.Style, textarea.Style) {
-	base := lipgloss.NewStyle().Foreground(t.Fg).Background(t.BgInput)
-	muted := lipgloss.NewStyle().Foreground(t.Muted).Background(t.BgInput)
-	prompt := lipgloss.NewStyle().Foreground(t.Accent).Background(t.BgInput).Bold(true)
+	base := lipgloss.NewStyle().Foreground(t.Fg)
+	muted := lipgloss.NewStyle().Foreground(t.Muted)
+	prompt := lipgloss.NewStyle().Foreground(t.Accent).Bold(true)
 	focused := textarea.Style{
 		Base:        base,
-		CursorLine:  lipgloss.NewStyle().Background(t.BgInput),
+		CursorLine:  lipgloss.NewStyle(),
 		EndOfBuffer: muted,
 		Placeholder: muted.Italic(true),
 		Prompt:      prompt,
@@ -396,7 +396,7 @@ func textareaStylesForTheme(t Theme) (textarea.Style, textarea.Style) {
 	}
 	blurred := textarea.Style{
 		Base:        base,
-		CursorLine:  lipgloss.NewStyle().Background(t.BgInput),
+		CursorLine:  lipgloss.NewStyle(),
 		EndOfBuffer: muted,
 		Placeholder: muted.Italic(true),
 		Prompt:      prompt,

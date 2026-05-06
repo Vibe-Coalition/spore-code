@@ -239,11 +239,11 @@ func TestApplyThemeStylesInputAndInvalidatesHistory(t *testing.T) {
 
 	m.applyTheme(themeLight)
 
-	if got := fmt.Sprint(m.input.FocusedStyle.Base.GetBackground()); got != fmt.Sprint(themeLight.BgInput) {
-		t.Fatalf("input background was not themed: got %s want %s", got, themeLight.BgInput)
-	}
 	if got := fmt.Sprint(m.input.FocusedStyle.Text.GetForeground()); got != fmt.Sprint(themeLight.Fg) {
 		t.Fatalf("input foreground was not themed: got %s want %s", got, themeLight.Fg)
+	}
+	if got := fmt.Sprint(m.input.FocusedStyle.Prompt.GetForeground()); got != fmt.Sprint(themeLight.Accent) {
+		t.Fatalf("input prompt was not accented: got %s want %s", got, themeLight.Accent)
 	}
 	if !m.historyDirty || !m.viewportDirty || m.renderedHistory != "" || m.historyWidth != -1 {
 		t.Fatalf("theme change did not invalidate render cache: dirty=%t viewportDirty=%t history=%q width=%d",
@@ -281,6 +281,17 @@ func TestViewPaintsBaseBackgroundWithoutResetHoles(t *testing.T) {
 		t.Fatalf("view has ANSI resets that do not restore base background:\n%q", out)
 	}
 	assertViewFits(t, m)
+}
+
+func TestLogoMessageUsesThemeAccent(t *testing.T) {
+	rendered := renderMessage(chatMsg{Role: "system", Text: LogoFull}, 100, themeDark)
+	accent := foregroundOpen(themeDark.Accent)
+	if accent == "" || !strings.Contains(rendered, accent) {
+		t.Fatalf("logo banner was not accented:\n%q", rendered)
+	}
+	if muted := foregroundOpen(themeDark.Muted); muted != "" && strings.Contains(rendered, muted) {
+		t.Fatalf("logo banner should not render as muted system text:\n%q", rendered)
+	}
 }
 
 func renderTestModel(w, h int) *Model {
