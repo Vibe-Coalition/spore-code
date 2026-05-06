@@ -4,7 +4,7 @@ import "testing"
 
 func TestThemeNamesExposeOnlyCurrentCoreThemes(t *testing.T) {
 	got := ThemeNames()
-	want := []string{"dark", "light"}
+	want := []string{"dark", "oled", "light"}
 	if len(got) != len(want) {
 		t.Fatalf("theme count mismatch: got %#v want %#v", got, want)
 	}
@@ -21,5 +21,8 @@ func TestLegacyThemeNamesNormalizeToDark(t *testing.T) {
 	}
 	if isThemeName("oak") {
 		t.Fatalf("legacy theme should not be exposed as selectable")
+	}
+	if got := themeForName("oled").Name; got != "oled" {
+		t.Fatalf("oled theme should be selectable, got %q", got)
 	}
 }

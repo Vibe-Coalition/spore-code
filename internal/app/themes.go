@@ -330,11 +330,13 @@ var themeSnes = Theme{
 }.derive()
 
 // themeForName returns the named theme, falling back to dark. Older saved
-// theme names from the pre-two-theme CLI intentionally normalize to dark.
+// theme names that are no longer exposed intentionally normalize to dark.
 func themeForName(name string) Theme {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "dark", "":
 		return themeDark
+	case "oled":
+		return themeOled
 	case "light":
 		return themeLight
 	}
@@ -343,7 +345,7 @@ func themeForName(name string) Theme {
 
 func isThemeName(name string) bool {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "dark", "light":
+	case "dark", "oled", "light":
 		return true
 	default:
 		return false
@@ -352,12 +354,12 @@ func isThemeName(name string) bool {
 
 // ThemeNames returns the order shown by /theme.
 func ThemeNames() []string {
-	return []string{"dark", "light"}
+	return []string{"dark", "oled", "light"}
 }
 
 // AllThemes returns every exposed theme value — used by the wizard for swatches.
 func AllThemes() []Theme {
-	return []Theme{themeDark, themeLight}
+	return []Theme{themeDark, themeOled, themeLight}
 }
 
 func (m *Model) applyTheme(t Theme) {

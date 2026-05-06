@@ -507,7 +507,7 @@ func init() {
 	register(&slashCmd{Name: "/stop", Help: "stop the current generation", Handler: cmdStop})
 	register(&slashCmd{Name: "/plan", Help: "toggle plan/execute mode (same as Shift+Tab)", Handler: cmdPlan})
 	register(&slashCmd{Name: "/status", Help: "connection + session info", Handler: cmdStatus})
-	register(&slashCmd{Name: "/theme", Help: "switch theme (dark/light)", Handler: cmdTheme})
+	register(&slashCmd{Name: "/theme", Help: "switch theme (dark/oled/light)", Handler: cmdTheme})
 	register(&slashCmd{Name: "/display", Help: "toggle optional UI: thinking/tools/usage on|off", Handler: cmdDisplay})
 	register(&slashCmd{Name: "/mode", Help: "tool approval mode (auto/ask/locked/yolo/rules)", Handler: cmdMode})
 	register(&slashCmd{Name: "/approve-all", Help: "shortcut for /mode auto", Handler: cmdApproveAll})

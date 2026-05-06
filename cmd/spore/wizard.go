@@ -127,7 +127,7 @@ func runSetupWizard() (*config.Config, error) {
 	}
 	fmt.Println()
 
-	// 5. Theme — show the current two-theme palette with swatches so the
+	// 5. Theme — show the current palette with swatches so the
 	// user can preview the choice before picking.
 	fmt.Println("5. Choose a theme")
 	all := app.AllThemes()
