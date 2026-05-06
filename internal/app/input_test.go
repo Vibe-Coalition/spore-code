@@ -56,6 +56,28 @@ func TestTypedRunesFlushBeforeEnterSends(t *testing.T) {
 	}
 }
 
+func TestInputBurstFlushIsDebouncedUntilLatestTimer(t *testing.T) {
+	m := inputTestModel(t)
+
+	next, _ := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	m = next.(*Model)
+	firstSeq := m.inputBurstSeq
+	next, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
+	m = next.(*Model)
+
+	next, _ = m.Update(inputTextFlushMsg{seq: firstSeq})
+	m = next.(*Model)
+	if got := m.input.Value(); got != "" {
+		t.Fatalf("stale flush timer should not insert partial input, got %q", got)
+	}
+
+	next, _ = m.Update(inputTextFlushMsg{seq: m.inputBurstSeq})
+	m = next.(*Model)
+	if got := m.input.Value(); got != "ab" {
+		t.Fatalf("latest flush did not insert full input burst, got %q", got)
+	}
+}
+
 func TestStreamedMultilinePasteDoesNotSubmitEachLine(t *testing.T) {
 	m := inputTestModel(t)
 
@@ -123,6 +145,26 @@ func TestShellQuotedFileDropNormalizesToNewlinePaths(t *testing.T) {
 	}, "\n")
 	if got != want {
 		t.Fatalf("drop normalization mismatch\nwant: %q\n got: %q", want, got)
+	}
+}
+
+func TestRawDroppedPathWithSpacesAttachesAsSingleImage(t *testing.T) {
+	m := inputTestModel(t)
+	src := filepath.Join(m.cwd, "spore shot.png")
+	touchFile(t, src)
+
+	for _, r := range src {
+		next, _ := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = next.(*Model)
+	}
+	next, _ := m.Update(inputTextFlushMsg{seq: m.inputBurstSeq})
+	got := next.(*Model)
+
+	if got.input.Value() != "Attached image: spore shot.png" {
+		t.Fatalf("expected raw path with spaces to become image placeholder, got %q", got.input.Value())
+	}
+	if len(got.inputAttachments) != 1 || got.inputAttachments[0].Path != src {
+		t.Fatalf("expected hidden image attachment for raw path, got %#v", got.inputAttachments)
 	}
 }
 
@@ -210,6 +252,14 @@ func TestQuotedWindowsPathDropKeepsBackslashes(t *testing.T) {
 	want := `C:\Users\Levi\Pictures\spore shot.png`
 	if got != want {
 		t.Fatalf("windows path normalization mismatch\nwant: %q\n got: %q", want, got)
+	}
+}
+
+func TestRawWindowsPathDropKeepsBackslashes(t *testing.T) {
+	got := normalizePastedInput(`C:\Users\Levi\Pictures\spore shot.png`, "")
+	want := `C:\Users\Levi\Pictures\spore shot.png`
+	if got != want {
+		t.Fatalf("raw windows path normalization mismatch\nwant: %q\n got: %q", want, got)
 	}
 }
 

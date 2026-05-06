@@ -83,9 +83,6 @@ func (m *Model) queueInputText(text string, normalize bool) tea.Cmd {
 	if normalize {
 		m.inputBurstNormalize = true
 	}
-	if m.inputBurstScheduled {
-		return nil
-	}
 	m.inputBurstScheduled = true
 	m.inputBurstSeq++
 	seq := m.inputBurstSeq
@@ -168,6 +165,17 @@ func normalizePastedInputWithAttachments(raw, cwd string, attachImages bool) (st
 }
 
 func droppedPathFields(s, cwd string) ([]string, bool) {
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" {
+		return nil, false
+	}
+	if path, ok := fileURIToPath(trimmed); ok && !strings.Contains(path, "file://") {
+		return []string{path}, true
+	}
+	if pathExists(trimmed, cwd) || (looksLikeDroppedPath(trimmed, cwd) && !strings.ContainsAny(trimmed, " \t\n")) {
+		return []string{trimmed}, true
+	}
+
 	fields, ok := shellLikeFields(s)
 	if !ok || len(fields) == 0 {
 		return nil, false
@@ -452,7 +460,11 @@ func shellLikeFields(s string) ([]string, bool) {
 		}
 		switch {
 		case r == '\\' && !inSingle && !inDouble:
-			escaped = true
+			if isWindowsPathFieldPrefix(b.String()) {
+				b.WriteRune(r)
+			} else {
+				escaped = true
+			}
 			haveField = true
 		case r == '\'' && !inDouble:
 			inSingle = !inSingle
@@ -475,6 +487,16 @@ func shellLikeFields(s string) ([]string, bool) {
 	}
 	flush()
 	return fields, true
+}
+
+func isWindowsPathFieldPrefix(s string) bool {
+	if len(s) >= 2 {
+		b := []byte(s)
+		if ((b[0] >= 'a' && b[0] <= 'z') || (b[0] >= 'A' && b[0] <= 'Z')) && b[1] == ':' {
+			return true
+		}
+	}
+	return s == `\` || strings.HasPrefix(s, `\\`)
 }
 
 func looksLikeDroppedPath(path, cwd string) bool {
