@@ -117,7 +117,7 @@ func cmdQuit(m *Model, _ []string) (tea.Model, tea.Cmd) {
 	return m, tea.Quit
 }
 
-// /logout — clear the saved team key and quit. Next launch runs the
+// /logout — clear the saved invite key and quit. Next launch runs the
 // first-time wizard since no key is configured.
 func cmdLogout(m *Model, _ []string) (tea.Model, tea.Cmd) {
 	m.cfg.Connection.Key = ""

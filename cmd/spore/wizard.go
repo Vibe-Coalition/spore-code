@@ -79,14 +79,14 @@ func runSetupWizard() (*config.Config, error) {
 	}
 	fmt.Println()
 
-	// 3. Team key
+	// 3. Invite key
 	fmt.Println("3. Authentication")
 	fmt.Println("   Enter the invite key from your Spore Core server (.env SPORE_INVITE_KEY value).")
 	key := ""
 	for key == "" {
-		key = strings.TrimSpace(promptSecret(rd, "   Team key", ""))
+		key = strings.TrimSpace(promptInviteKey(rd, "   Invite key", ""))
 		if key == "" {
-			fmt.Println("   Team key is required.")
+			fmt.Println("   Invite key is required.")
 		}
 	}
 	fmt.Println()
@@ -110,7 +110,7 @@ func runSetupWizard() (*config.Config, error) {
 						fmt.Println("   Username is required.")
 					}
 				}
-				nextKey := strings.TrimSpace(promptSecret(rd, "   Team key", key))
+				nextKey := strings.TrimSpace(promptInviteKey(rd, "   Invite key", key))
 				if nextKey != "" {
 					key = nextKey
 				}
@@ -217,7 +217,7 @@ func prompt(rd *bufio.Reader, label, def string) string {
 		fmt.Printf("%s: ", label)
 	}
 	line, _ := rd.ReadString('\n')
-	line = strings.TrimRight(line, "\r\n")
+	line = cleanPromptLine(line)
 	if line == "" {
 		return def
 	}
@@ -236,28 +236,27 @@ func promptEndpoint(rd *bufio.Reader, defaultHost string, defaultPort int) (stri
 	return host, port
 }
 
-func promptSecret(rd *bufio.Reader, label, def string) string {
+func promptInviteKey(rd *bufio.Reader, label, def string) string {
 	if def != "" {
-		fmt.Printf("%s [keep existing; enter to keep]: ", label)
+		fmt.Printf("%s [keep existing; paste replacement or enter to keep]: ", label)
 	} else {
 		fmt.Printf("%s: ", label)
 	}
-	if term.IsTerminal(int(os.Stdin.Fd())) {
-		b, err := term.ReadPassword(int(os.Stdin.Fd()))
-		fmt.Println()
-		if err == nil {
-			line := strings.TrimRight(string(b), "\r\n")
-			if line == "" {
-				return def
-			}
-			return line
-		}
-	}
 	line, _ := rd.ReadString('\n')
-	line = strings.TrimRight(line, "\r\n")
+	line = cleanPromptLine(line)
 	if line == "" {
 		return def
 	}
+	return line
+}
+
+func cleanPromptLine(line string) string {
+	line = strings.TrimRight(line, "\r\n")
+	// Some terminals paste bracketed text as ESC[200~...ESC[201~ when a
+	// previous alt-screen app left bracketed paste enabled. Strip those
+	// wrappers so invite keys pasted during setup remain valid.
+	line = strings.ReplaceAll(line, "\x1b[200~", "")
+	line = strings.ReplaceAll(line, "\x1b[201~", "")
 	return line
 }
 
