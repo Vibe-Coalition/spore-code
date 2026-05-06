@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -86,12 +88,14 @@ func runSetupWizard() (*config.Config, error) {
 	authMethod := config.AuthInvite
 	key := ""
 	password := ""
+	deviceToken := ""
+	deviceID := ""
 	fmt.Println()
 
 	// 4. Test
 	for {
 		fmt.Println("4. Testing connection…")
-		if detectedMethod, err := testAuthAuto(host, port, user, secret); err != nil {
+		if detected, err := testAuthAuto(host, port, user, secret); err != nil {
 			fmt.Printf("   ✗ %s\n", err)
 			if confirm(rd, "   Edit details and retry?", true) {
 				host, port = promptEndpoint(rd, host, port)
@@ -111,21 +115,16 @@ func runSetupWizard() (*config.Config, error) {
 				fmt.Println()
 				continue
 			}
-			if !confirm(rd, "   Continue anyway?", false) {
-				return nil, fmt.Errorf("setup aborted")
-			}
-			authMethod = config.AuthPassword
-			password = secret
-			key = ""
+			return nil, fmt.Errorf("setup aborted")
 		} else {
-			authMethod = detectedMethod
-			if authMethod == config.AuthPassword {
-				password = secret
-				key = ""
-			} else {
-				key = secret
-				password = ""
+			if detected.DeviceToken == "" {
+				return nil, fmt.Errorf("server authenticated but did not issue a device token; update Spore Core and retry")
 			}
+			authMethod = config.AuthDevice
+			deviceToken = detected.DeviceToken
+			deviceID = detected.DeviceID
+			key = ""
+			password = ""
 			fmt.Println("   ✓ Connected and authenticated successfully.")
 		}
 		break
@@ -161,9 +160,14 @@ func runSetupWizard() (*config.Config, error) {
 
 	// 6. Save
 	cfg := &config.Config{
-		Connection: config.ConnectionSection{Host: host, Port: port, User: user, AuthMethod: authMethod, Key: key, Password: password},
+		Connection: config.ConnectionSection{Host: host, Port: port, User: user, AuthMethod: authMethod, Key: key, Password: password, DeviceID: deviceID},
 		Display:    config.DisplaySection{Theme: theme},
 		GlobalDir:  globalDir,
+	}
+	if deviceToken != "" {
+		if err := config.SaveDeviceToken(cfg, deviceToken); err != nil {
+			return nil, fmt.Errorf("save device token: %w", err)
+		}
 	}
 	if err := config.Save(cfg); err != nil {
 		return nil, fmt.Errorf("save config: %w", err)
@@ -306,15 +310,42 @@ func contains(xs []string, s string) bool {
 	return false
 }
 
-// testAuth POSTs to /api/spore-code/auth just to validate credentials. Mirrors
-// connection.py:_sync_auth without establishing the WS.
-func testAuth(host string, port int, user, authMethod, key, password string) error {
+type authAttempt struct {
+	Method      string
+	DeviceToken string
+	DeviceID    string
+}
+
+func setupAuthTransportAllowed(base string) bool {
+	u, err := url.Parse(base)
+	if err != nil {
+		return false
+	}
+	if strings.EqualFold(u.Scheme, "https") {
+		return true
+	}
+	host := u.Hostname()
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return true
+	}
+	return strings.EqualFold(os.Getenv("SPORE_CODE_ALLOW_INSECURE_AUTH"), "true") || os.Getenv("SPORE_CODE_ALLOW_INSECURE_AUTH") == "1"
+}
+
+// testAuth POSTs to /api/spore-code/auth to validate credentials and request
+// a revocable device token. It does not establish the WS.
+func testAuth(host string, port int, user, authMethod, key, password string) (authAttempt, error) {
 	base := host
 	if !strings.Contains(host, "://") {
 		base = fmt.Sprintf("http://%s:%d", host, port)
 	}
 	base = strings.TrimRight(base, "/")
-	authBody := map[string]string{"username": user}
+	if !setupAuthTransportAllowed(base) {
+		return authAttempt{}, fmt.Errorf("refusing to send credentials over insecure HTTP to %s (use HTTPS, localhost, or SPORE_CODE_ALLOW_INSECURE_AUTH=true)", base)
+	}
+	authBody := map[string]any{"username": user, "issueDevice": true}
 	if authMethod == config.AuthPassword {
 		authBody["authMethod"] = config.AuthPassword
 		authBody["password"] = password
@@ -328,7 +359,7 @@ func testAuth(host string, port int, user, authMethod, key, password string) err
 	client := &http.Client{Timeout: 8 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("cannot reach server: %w", err)
+		return authAttempt{}, fmt.Errorf("cannot reach server: %w", err)
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
@@ -338,27 +369,32 @@ func testAuth(host string, port int, user, authMethod, key, password string) err
 		}
 		_ = json.Unmarshal(body, &e)
 		if e.Error != "" {
-			return fmt.Errorf("%s", e.Error)
+			return authAttempt{}, fmt.Errorf("%s", e.Error)
 		}
-		return fmt.Errorf("HTTP %d", resp.StatusCode)
+		return authAttempt{}, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
-	return nil
+	var ok struct {
+		DeviceToken string `json:"deviceToken"`
+		DeviceID    string `json:"deviceId"`
+	}
+	_ = json.Unmarshal(body, &ok)
+	return authAttempt{Method: authMethod, DeviceToken: ok.DeviceToken, DeviceID: ok.DeviceID}, nil
 }
 
-func testAuthAuto(host string, port int, user, secret string) (string, error) {
+func testAuthAuto(host string, port int, user, secret string) (authAttempt, error) {
 	secret = strings.TrimSpace(secret)
 	if secret == "" {
-		return "", fmt.Errorf("invite key or account password is required")
+		return authAttempt{}, fmt.Errorf("invite key or account password is required")
 	}
-	passwordErr := testAuth(host, port, user, config.AuthPassword, "", secret)
+	passwordAttempt, passwordErr := testAuth(host, port, user, config.AuthPassword, "", secret)
 	if passwordErr == nil {
-		return config.AuthPassword, nil
+		return passwordAttempt, nil
 	}
-	inviteErr := testAuth(host, port, user, config.AuthInvite, secret, "")
+	inviteAttempt, inviteErr := testAuth(host, port, user, config.AuthInvite, secret, "")
 	if inviteErr == nil {
-		return config.AuthInvite, nil
+		return inviteAttempt, nil
 	}
-	return "", fmt.Errorf("account password failed (%s); invite key failed (%s)", passwordErr, inviteErr)
+	return authAttempt{}, fmt.Errorf("account password failed (%s); invite key failed (%s)", passwordErr, inviteErr)
 }
 
 // copyDirRecursive copies src → dst, creating dst if needed. Used for

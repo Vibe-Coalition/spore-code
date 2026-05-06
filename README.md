@@ -112,14 +112,13 @@ Global: `~/.spore-code/config.toml`:
 host = "spore.example.com"
 port = 18810
 user = "yam"
-auth_method = "invite"
-key = "<your-spore-core-invite-key>"
+auth_method = "device"
+key = ""
 password = ""
+device_id = "<server-issued-device-id>"
 
-# Or for a full Spore account:
-# auth_method = "password"
-# key = ""
-# password = "<your-spore-account-password>"
+# Invite keys and account passwords are only used during setup. Spore Code
+# exchanges them for a revocable device token and does not keep them here.
 
 [display]
 theme = "dark"

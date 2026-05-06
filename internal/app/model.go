@@ -382,6 +382,12 @@ func historyKey(role, text string) string {
 }
 
 func (m *Model) Init() tea.Cmd {
+	deviceToken := ""
+	if m.cfg.Connection.Method() == config.AuthDevice {
+		if tok, err := config.LoadDeviceToken(m.cfg); err == nil {
+			deviceToken = tok
+		}
+	}
 	m.client = conn.New(
 		m.cfg.Connection.Host,
 		m.cfg.Connection.Port,
@@ -389,6 +395,7 @@ func (m *Model) Init() tea.Cmd {
 		m.cfg.Connection.Method(),
 		m.cfg.Connection.Key,
 		m.cfg.Connection.Password,
+		deviceToken,
 	)
 	var reconnecting atomic.Bool
 	m.client.OnConnected = func() {

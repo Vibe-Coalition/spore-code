@@ -17,7 +17,7 @@ func TestCleanPromptLineStripsBracketedPaste(t *testing.T) {
 }
 
 func TestTestAuthUsesPasswordPayload(t *testing.T) {
-	var got map[string]string
+	var got map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/spore-code/auth" {
 			t.Fatalf("unexpected path %s", r.URL.Path)
@@ -25,14 +25,14 @@ func TestTestAuthUsesPasswordPayload(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		_, _ = w.Write([]byte(`{"token":"ok"}`))
+		_, _ = w.Write([]byte(`{"token":"ok","deviceToken":"device"}`))
 	}))
 	defer srv.Close()
 
-	if err := testAuth(srv.URL, 0, "yam", config.AuthPassword, "", "secret"); err != nil {
+	if _, err := testAuth(srv.URL, 0, "yam", config.AuthPassword, "", "secret"); err != nil {
 		t.Fatalf("test auth: %v", err)
 	}
-	if got["username"] != "yam" || got["password"] != "secret" || got["authMethod"] != config.AuthPassword {
+	if got["username"] != "yam" || got["password"] != "secret" || got["authMethod"] != config.AuthPassword || got["issueDevice"] != true {
 		t.Fatalf("password auth payload mismatch: %#v", got)
 	}
 	if _, ok := got["key"]; ok {
@@ -41,7 +41,7 @@ func TestTestAuthUsesPasswordPayload(t *testing.T) {
 }
 
 func TestTestAuthAutoDetectsPassword(t *testing.T) {
-	var got map[string]string
+	var got map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
 			t.Fatalf("decode request: %v", err)
@@ -51,23 +51,23 @@ func TestTestAuthAutoDetectsPassword(t *testing.T) {
 			_, _ = w.Write([]byte(`{"error":"Invalid credentials"}`))
 			return
 		}
-		_, _ = w.Write([]byte(`{"token":"ok"}`))
+		_, _ = w.Write([]byte(`{"token":"ok","deviceToken":"device"}`))
 	}))
 	defer srv.Close()
 
-	method, err := testAuthAuto(srv.URL, 0, "yam", "secret")
+	attempt, err := testAuthAuto(srv.URL, 0, "yam", "secret")
 	if err != nil {
 		t.Fatalf("auto auth: %v", err)
 	}
-	if method != config.AuthPassword {
-		t.Fatalf("expected password auth, got %q", method)
+	if attempt.Method != config.AuthPassword {
+		t.Fatalf("expected password auth, got %q", attempt.Method)
 	}
 }
 
 func TestTestAuthAutoFallsBackToInviteKey(t *testing.T) {
-	var calls []map[string]string
+	var calls []map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var got map[string]string
+		var got map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
@@ -77,16 +77,16 @@ func TestTestAuthAutoFallsBackToInviteKey(t *testing.T) {
 			_, _ = w.Write([]byte(`{"error":"Invalid credentials"}`))
 			return
 		}
-		_, _ = w.Write([]byte(`{"token":"ok"}`))
+		_, _ = w.Write([]byte(`{"token":"ok","deviceToken":"device"}`))
 	}))
 	defer srv.Close()
 
-	method, err := testAuthAuto(srv.URL, 0, "yam", "invite-key")
+	attempt, err := testAuthAuto(srv.URL, 0, "yam", "invite-key")
 	if err != nil {
 		t.Fatalf("auto auth: %v", err)
 	}
-	if method != config.AuthInvite {
-		t.Fatalf("expected invite auth, got %q", method)
+	if attempt.Method != config.AuthInvite {
+		t.Fatalf("expected invite auth, got %q", attempt.Method)
 	}
 	if len(calls) != 2 {
 		t.Fatalf("expected password attempt then invite fallback, got %d calls", len(calls))

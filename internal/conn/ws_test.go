@@ -21,7 +21,7 @@ func TestAuthenticateUsesInviteKeyPayload(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, 0, "yam", "invite", "invite-key", "")
+	c := New(srv.URL, 0, "yam", "invite", "invite-key", "", "")
 	if err := c.Authenticate(context.Background()); err != nil {
 		t.Fatalf("authenticate: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestAuthenticateUsesPasswordPayload(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, 0, "yam", "password", "", "secret")
+	c := New(srv.URL, 0, "yam", "password", "", "secret", "")
 	if err := c.Authenticate(context.Background()); err != nil {
 		t.Fatalf("authenticate: %v", err)
 	}
@@ -55,5 +55,25 @@ func TestAuthenticateUsesPasswordPayload(t *testing.T) {
 	}
 	if got["authMethod"] != "password" {
 		t.Fatalf("password auth should identify its auth method: %#v", got)
+	}
+}
+
+func TestAuthenticateUsesDeviceSession(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/spore-code/session" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		gotAuth = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte(`{"token":"ws-ticket"}`))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, 0, "yam", "device", "", "", "device-token")
+	if err := c.Authenticate(context.Background()); err != nil {
+		t.Fatalf("authenticate: %v", err)
+	}
+	if gotAuth != "Bearer device-token" {
+		t.Fatalf("device auth header mismatch: %q", gotAuth)
 	}
 }

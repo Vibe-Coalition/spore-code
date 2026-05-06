@@ -7,9 +7,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -104,6 +106,20 @@ func main() {
 		}
 		if *user != "" {
 			cfg.Connection.User = *user
+		}
+	}
+	if cfg.Connection.Method() == config.AuthDevice {
+		if _, err := config.LoadDeviceToken(cfg); err != nil {
+			fmt.Fprintln(os.Stderr, "missing device token — running setup wizard")
+			fresh, werr := runSetupWizard()
+			if werr != nil {
+				fail("setup wizard failed:", werr)
+			}
+			cfg = fresh
+		}
+	} else if cfg.Connection.Key != "" || cfg.Connection.Password != "" {
+		if err := migrateLegacyCredentials(cfg); err != nil {
+			fail("credential migration failed:", err)
 		}
 	}
 
@@ -206,9 +222,63 @@ func runLogoutCommand() error {
 	}
 	cfg.Connection.Key = ""
 	cfg.Connection.Password = ""
+	if cfg.Connection.Method() == config.AuthDevice {
+		if tok, err := config.LoadDeviceToken(cfg); err == nil {
+			_ = revokeDeviceToken(cfg, tok)
+		}
+	}
+	cfg.Connection.AuthMethod = config.AuthInvite
+	cfg.Connection.DeviceID = ""
+	_ = config.DeleteDeviceToken(cfg)
 	if err := config.Save(cfg); err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stdout, "Logged out — cleared saved credentials from %s\n", filepath.Join(cfg.GlobalDir, "config.toml"))
+	return nil
+}
+
+func migrateLegacyCredentials(cfg *config.Config) error {
+	method := cfg.Connection.Method()
+	attempt, err := testAuth(cfg.Connection.Host, cfg.Connection.Port, cfg.Connection.User, method, cfg.Connection.Key, cfg.Connection.Password)
+	if err != nil {
+		return err
+	}
+	if attempt.DeviceToken == "" {
+		return fmt.Errorf("server did not issue a device token; update Spore Core and retry")
+	}
+	cfg.Connection.AuthMethod = config.AuthDevice
+	cfg.Connection.Key = ""
+	cfg.Connection.Password = ""
+	cfg.Connection.DeviceID = attempt.DeviceID
+	if err := config.SaveDeviceToken(cfg, attempt.DeviceToken); err != nil {
+		return err
+	}
+	if err := config.Save(cfg); err != nil {
+		return err
+	}
+	fmt.Fprintln(os.Stderr, "migrated saved credentials to a revocable device token")
+	return nil
+}
+
+func revokeDeviceToken(cfg *config.Config, token string) error {
+	base := cfg.Connection.Host
+	if !strings.Contains(base, "://") {
+		base = fmt.Sprintf("http://%s:%d", base, cfg.Connection.Port)
+	}
+	base = strings.TrimRight(base, "/")
+	if !setupAuthTransportAllowed(base) {
+		return fmt.Errorf("refusing to send device token over insecure HTTP to %s", base)
+	}
+	req, err := http.NewRequest("POST", base+"/api/spore-code/logout", nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
 	return nil
 }

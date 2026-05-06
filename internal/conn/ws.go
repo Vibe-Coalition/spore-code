@@ -2,8 +2,8 @@
 // Mirrors acorn/connection.py.
 //
 // Flow:
-//  1. HTTP POST {host}/api/spore-code/auth with invite key or password → {token}.
-//  2. WebSocket connect to {ws_host}/ws?token={token}.
+//  1. HTTP POST {host}/api/spore-code/session with a device token → {token}.
+//  2. WebSocket connect to {ws_host}/ws?token={token}; the token is a short-lived ticket.
 //  3. Inbound messages fan out into Client.In.
 //  4. On disconnect, transparent reconnect with exponential backoff,
 //     re-authenticate, flush outbox of messages queued during the outage.
@@ -19,8 +19,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -38,14 +40,16 @@ type Frame struct {
 
 // Authed response from /api/spore-code/auth.
 type authResp struct {
-	Token string `json:"token"`
-	Error string `json:"error,omitempty"`
+	Token       string `json:"token"`
+	DeviceToken string `json:"deviceToken,omitempty"`
+	DeviceID    string `json:"deviceId,omitempty"`
+	Error       string `json:"error,omitempty"`
 }
 
 // Client owns the WebSocket + reconnect logic.
 type Client struct {
-	host, user, authMethod, key, password string
-	port                                  int
+	host, user, authMethod, key, password, deviceToken string
+	port                                               int
 
 	baseURL string
 	wsURL   string
@@ -69,7 +73,7 @@ type Client struct {
 	done chan struct{} // closed on Close()
 }
 
-func New(host string, port int, user, authMethod, key, password string) *Client {
+func New(host string, port int, user, authMethod, key, password, deviceToken string) *Client {
 	base := host
 	if !strings.Contains(host, "://") {
 		base = fmt.Sprintf("http://%s:%d", host, port)
@@ -78,14 +82,15 @@ func New(host string, port int, user, authMethod, key, password string) *Client 
 	wsBase := strings.Replace(base, "https://", "wss://", 1)
 	wsBase = strings.Replace(wsBase, "http://", "ws://", 1)
 	return &Client{
-		host:       host,
-		port:       port,
-		user:       user,
-		authMethod: authMethod,
-		key:        key,
-		password:   password,
-		baseURL:    base,
-		wsURL:      wsBase + "/ws",
+		host:        host,
+		port:        port,
+		user:        user,
+		authMethod:  authMethod,
+		key:         key,
+		password:    password,
+		deviceToken: deviceToken,
+		baseURL:     base,
+		wsURL:       wsBase + "/ws",
 		// In is sized for bursty streaming. 4096 covers a long agent
 		// turn (1000+ chat:delta chunks) even with a slow renderer
 		// (glamour render time grows linearly with message length).
@@ -98,21 +103,58 @@ func New(host string, port int, user, authMethod, key, password string) *Client 
 	}
 }
 
+func authTransportAllowed(base string) bool {
+	u, err := url.Parse(base)
+	if err != nil {
+		return false
+	}
+	if strings.EqualFold(u.Scheme, "https") {
+		return true
+	}
+	host := u.Hostname()
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return true
+	}
+	return strings.EqualFold(os.Getenv("SPORE_CODE_ALLOW_INSECURE_AUTH"), "true") || os.Getenv("SPORE_CODE_ALLOW_INSECURE_AUTH") == "1"
+}
+
 // Authenticate POSTs to /api/spore-code/auth and stashes the token.
 func (c *Client) Authenticate(ctx context.Context) error {
-	payload := map[string]string{"username": c.user}
-	if strings.EqualFold(strings.TrimSpace(c.authMethod), "password") {
-		payload["authMethod"] = "password"
-		payload["password"] = c.password
-	} else {
-		payload["key"] = c.key
+	if !authTransportAllowed(c.baseURL) {
+		return fmt.Errorf("refusing to send credentials or device token over insecure HTTP to %s (use HTTPS, localhost, or SPORE_CODE_ALLOW_INSECURE_AUTH=true)", c.baseURL)
 	}
-	data, _ := json.Marshal(payload)
-	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/api/spore-code/auth", bytes.NewReader(data))
+	var req *http.Request
+	var err error
+	if strings.EqualFold(strings.TrimSpace(c.authMethod), "device") {
+		if strings.TrimSpace(c.deviceToken) == "" {
+			return errors.New("missing device token — run setup again")
+		}
+		req, err = http.NewRequestWithContext(ctx, "POST", c.baseURL+"/api/spore-code/session", nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+c.deviceToken)
+	} else {
+		payload := map[string]string{"username": c.user}
+		if strings.EqualFold(strings.TrimSpace(c.authMethod), "password") {
+			payload["authMethod"] = "password"
+			payload["password"] = c.password
+		} else {
+			payload["key"] = c.key
+		}
+		data, _ := json.Marshal(payload)
+		req, err = http.NewRequestWithContext(ctx, "POST", c.baseURL+"/api/spore-code/auth", bytes.NewReader(data))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/json")
+	}
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
@@ -136,6 +178,27 @@ func (c *Client) Authenticate(ctx context.Context) error {
 	c.mu.Lock()
 	c.token = ar.Token
 	c.mu.Unlock()
+	return nil
+}
+
+func (c *Client) Logout(ctx context.Context) error {
+	if strings.TrimSpace(c.deviceToken) == "" {
+		return nil
+	}
+	if !authTransportAllowed(c.baseURL) {
+		return fmt.Errorf("refusing to send device token over insecure HTTP to %s (use HTTPS, localhost, or SPORE_CODE_ALLOW_INSECURE_AUTH=true)", c.baseURL)
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/api/spore-code/logout", nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.deviceToken)
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
 	return nil
 }
 
@@ -167,7 +230,7 @@ func (c *Client) Connect(ctx context.Context) error {
 		if resp != nil {
 			status = resp.StatusCode
 		}
-		return fmt.Errorf("ws dial %s: %w (status %d)", u.String(), err, status)
+		return fmt.Errorf("ws dial %s://%s%s: %w (status %d)", u.Scheme, u.Host, u.Path, err, status)
 	}
 	c.mu.Lock()
 	c.ws = ws

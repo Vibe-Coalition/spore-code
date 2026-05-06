@@ -20,16 +20,20 @@ type ConnectionSection struct {
 	AuthMethod string `toml:"auth_method"`
 	Key        string `toml:"key"`
 	Password   string `toml:"password"`
+	DeviceID   string `toml:"device_id"`
 }
 
 const (
 	AuthInvite   = "invite"
 	AuthPassword = "password"
+	AuthDevice   = "device"
 )
 
 func (c ConnectionSection) Method() string {
 	method := strings.ToLower(strings.TrimSpace(c.AuthMethod))
 	switch method {
+	case AuthDevice:
+		return AuthDevice
 	case AuthPassword:
 		return AuthPassword
 	case AuthInvite:
@@ -47,6 +51,8 @@ func (c ConnectionSection) HasCredentials() bool {
 		return false
 	}
 	switch c.Method() {
+	case AuthDevice:
+		return true
 	case AuthPassword:
 		return c.Password != ""
 	default:
@@ -171,9 +177,10 @@ func mergeFile(path string, dst *Config) error {
 // Save writes the config to the global config.toml. Matches the layout the
 // Python setup wizard produces.
 func Save(cfg *Config) error {
-	if err := os.MkdirAll(cfg.GlobalDir, 0o755); err != nil {
+	if err := os.MkdirAll(cfg.GlobalDir, 0o700); err != nil {
 		return err
 	}
+	_ = os.Chmod(cfg.GlobalDir, 0o700)
 	path := filepath.Join(cfg.GlobalDir, "config.toml")
 	boolOrDefault := func(p *bool, def bool) bool {
 		if p == nil {
@@ -185,9 +192,10 @@ func Save(cfg *Config) error {
 host = %q
 port = %d
 user = %q
-auth_method = %q
-key = %q
-password = %q
+	auth_method = %q
+	key = %q
+	password = %q
+	device_id = %q
 
 [display]
 theme = %q
@@ -199,7 +207,7 @@ show_usage = %t
 auto_resume = %t
 `,
 		cfg.Connection.Host, cfg.Connection.Port,
-		cfg.Connection.User, cfg.Connection.Method(), cfg.Connection.Key, cfg.Connection.Password,
+		cfg.Connection.User, cfg.Connection.Method(), cfg.Connection.Key, cfg.Connection.Password, cfg.Connection.DeviceID,
 		cfg.Display.Theme,
 		boolOrDefault(cfg.Display.ShowThinking, true),
 		boolOrDefault(cfg.Display.ShowTools, true),

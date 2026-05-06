@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -120,8 +121,16 @@ func cmdQuit(m *Model, _ []string) (tea.Model, tea.Cmd) {
 // /logout — clear the saved auth secret and quit. Next launch runs the
 // first-time wizard since no credentials are configured.
 func cmdLogout(m *Model, _ []string) (tea.Model, tea.Cmd) {
+	if m.client != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_ = m.client.Logout(ctx)
+		cancel()
+	}
+	_ = config.DeleteDeviceToken(m.cfg)
 	m.cfg.Connection.Key = ""
 	m.cfg.Connection.Password = ""
+	m.cfg.Connection.AuthMethod = config.AuthInvite
+	m.cfg.Connection.DeviceID = ""
 	if err := config.Save(m.cfg); err != nil {
 		m.pushChat("system", "Logout: failed to save config: "+err.Error())
 		return m, nil
