@@ -81,21 +81,17 @@ func runSetupWizard() (*config.Config, error) {
 
 	// 3. Authentication
 	fmt.Println("3. Authentication")
-	fmt.Println("   Use an invite key for lightweight CLI-only access, or a password for a full Spore account.")
-	authMethod := promptAuthMethod(rd, config.AuthInvite)
+	fmt.Println("   Paste either your invite key or your Spore account password.")
+	secret := promptLoginSecret(rd, "")
+	authMethod := config.AuthInvite
 	key := ""
 	password := ""
-	if authMethod == config.AuthPassword {
-		password = promptAuthSecret(rd, authMethod, "")
-	} else {
-		key = promptAuthSecret(rd, authMethod, "")
-	}
 	fmt.Println()
 
 	// 4. Test
 	for {
 		fmt.Println("4. Testing connection…")
-		if err := testAuth(host, port, user, authMethod, key, password); err != nil {
+		if detectedMethod, err := testAuthAuto(host, port, user, secret); err != nil {
 			fmt.Printf("   ✗ %s\n", err)
 			if confirm(rd, "   Edit details and retry?", true) {
 				host, port = promptEndpoint(rd, host, port)
@@ -111,24 +107,25 @@ func runSetupWizard() (*config.Config, error) {
 						fmt.Println("   Username is required.")
 					}
 				}
-				nextMethod := promptAuthMethod(rd, authMethod)
-				if nextMethod != authMethod {
-					authMethod = nextMethod
-					key = ""
-					password = ""
-				}
-				if authMethod == config.AuthPassword {
-					password = promptAuthSecret(rd, authMethod, password)
-				} else {
-					key = promptAuthSecret(rd, authMethod, key)
-				}
+				secret = promptLoginSecret(rd, secret)
 				fmt.Println()
 				continue
 			}
 			if !confirm(rd, "   Continue anyway?", false) {
 				return nil, fmt.Errorf("setup aborted")
 			}
+			authMethod = config.AuthPassword
+			password = secret
+			key = ""
 		} else {
+			authMethod = detectedMethod
+			if authMethod == config.AuthPassword {
+				password = secret
+				key = ""
+			} else {
+				key = secret
+				password = ""
+			}
 			fmt.Println("   ✓ Connected and authenticated successfully.")
 		}
 		break
@@ -243,69 +240,22 @@ func promptEndpoint(rd *bufio.Reader, defaultHost string, defaultPort int) (stri
 	return host, port
 }
 
-func promptAuthMethod(rd *bufio.Reader, def string) string {
-	def = strings.ToLower(strings.TrimSpace(def))
-	if def != config.AuthPassword {
-		def = config.AuthInvite
-	}
+func promptLoginSecret(rd *bufio.Reader, existing string) string {
 	for {
-		fmt.Printf("   Login method [invite/password] [%s]: ", def)
-		line, _ := rd.ReadString('\n')
-		line = strings.ToLower(strings.TrimSpace(cleanPromptLine(line)))
-		if line == "" {
-			return def
-		}
-		switch line {
-		case "invite", "invite-key", "key", "i":
-			return config.AuthInvite
-		case "password", "account", "user", "p":
-			return config.AuthPassword
-		default:
-			fmt.Println("   Enter invite or password.")
-		}
-	}
-}
-
-func promptAuthSecret(rd *bufio.Reader, method, existing string) string {
-	label := "   Invite key"
-	read := func() string { return promptInviteKey(rd, label, existing) }
-	if method == config.AuthPassword {
-		label = "   Password"
-		read = func() string { return promptPassword(rd, label, existing != "") }
-	}
-	for {
-		secret := strings.TrimSpace(read())
+		secret := strings.TrimSpace(promptPassword(rd, "   Invite key or account password", existing != ""))
 		if secret != "" {
 			return secret
 		}
 		if existing != "" {
 			return existing
 		}
-		if method == config.AuthPassword {
-			fmt.Println("   Password is required.")
-		} else {
-			fmt.Println("   Invite key is required.")
-		}
+		fmt.Println("   Invite key or account password is required.")
 	}
-}
-
-func promptInviteKey(rd *bufio.Reader, label, def string) string {
-	if def != "" {
-		fmt.Printf("%s [keep existing; paste replacement or enter to keep]: ", label)
-	} else {
-		fmt.Printf("%s: ", label)
-	}
-	line, _ := rd.ReadString('\n')
-	line = cleanPromptLine(line)
-	if line == "" {
-		return def
-	}
-	return line
 }
 
 func promptPassword(rd *bufio.Reader, label string, hasExisting bool) string {
 	if hasExisting {
-		fmt.Printf("%s [keep existing; type replacement or enter to keep]: ", label)
+		fmt.Printf("%s [keep existing; paste replacement or enter to keep]: ", label)
 	} else {
 		fmt.Printf("%s: ", label)
 	}
@@ -393,6 +343,22 @@ func testAuth(host string, port int, user, authMethod, key, password string) err
 		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 	return nil
+}
+
+func testAuthAuto(host string, port int, user, secret string) (string, error) {
+	secret = strings.TrimSpace(secret)
+	if secret == "" {
+		return "", fmt.Errorf("invite key or account password is required")
+	}
+	passwordErr := testAuth(host, port, user, config.AuthPassword, "", secret)
+	if passwordErr == nil {
+		return config.AuthPassword, nil
+	}
+	inviteErr := testAuth(host, port, user, config.AuthInvite, secret, "")
+	if inviteErr == nil {
+		return config.AuthInvite, nil
+	}
+	return "", fmt.Errorf("account password failed (%s); invite key failed (%s)", passwordErr, inviteErr)
 }
 
 // copyDirRecursive copies src → dst, creating dst if needed. Used for

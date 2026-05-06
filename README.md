@@ -35,7 +35,9 @@ Optional overrides:
 ## Usage
 
 First launch (no `~/.spore-code/config.toml`) runs the setup wizard:
-host + port → username → invite key or account password → theme. After that:
+host + port → username → invite key or account password → theme. The wizard
+tests the secret both ways, so you do not have to choose an auth mode manually.
+After that:
 
 ```sh
 spore                       # normal mode — REPL in your cwd
