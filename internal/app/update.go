@@ -55,6 +55,13 @@ RULES:
 const PlanExecuteMsg = `[The user has approved the plan above. Switch to execute mode and implement it now. Proceed step by step, executing all the changes you outlined.]`
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if fm, ok := msg.(inputTextFlushMsg); ok {
+		if fm.seq == m.inputBurstSeq {
+			m.flushPendingInputText()
+		}
+		return m, nil
+	}
+
 	// Off-thread messages: permissions layer asking to open a modal.
 	if om, ok := msg.(openPermModalMsg); ok {
 		m.setWorkflowPhase(workflowBlockedPermission, om.name)
@@ -467,6 +474,11 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+
+	if cmd, consumed := m.handleTextInputKey(msg); consumed {
+		return m, cmd
+	}
+	m.flushPendingInputText()
 
 	// Slash autocomplete keys take priority when the dropdown is open.
 	if _, consumed := m.handleSuggestKey(msg); consumed {

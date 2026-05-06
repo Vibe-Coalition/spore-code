@@ -737,6 +737,13 @@ func (m *Model) updateQuestionModal(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	q := qm.questions[qm.idx]
 
+	if q.Options == nil {
+		if cmd, consumed := m.handleTextInputKey(km); consumed {
+			return m, cmd
+		}
+		m.flushPendingInputText()
+	}
+
 	switch km.String() {
 	case "esc":
 		m.modal = modalNone

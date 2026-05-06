@@ -194,6 +194,13 @@ type Model struct {
 	outputLogVP     viewport.Model
 	outputLogInit   bool
 	outputLogFollow bool
+
+	// Text input burst buffering. Some terminals deliver paste/drop data
+	// as a long stream of ordinary key events; batching those runes keeps
+	// paste responsive and prevents one full render per character.
+	inputBurst          []rune
+	inputBurstSeq       uint64
+	inputBurstScheduled bool
 }
 
 // SetProgram stores the reference so off-thread code can deliver messages.
