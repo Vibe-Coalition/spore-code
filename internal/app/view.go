@@ -622,6 +622,15 @@ func (m *Model) renderHeader() string {
 		Padding(0, 1).
 		Render(short(m.sess))
 
+	agentBadge := ""
+	if name := cleanAgentName(m.agentName); name != "" {
+		label := truncateLineCells(name, 24)
+		agentBadge = lipgloss.NewStyle().
+			Foreground(m.theme.Accent).Background(hdrBg).Bold(true).
+			Padding(0, 1).
+			Render(label)
+	}
+
 	// Activity spinner + thinking token count, only while a turn is live.
 	activity := ""
 	if m.generating || m.thinking {
@@ -654,9 +663,9 @@ func (m *Model) renderHeader() string {
 
 	// Compose left + right, dropping optional pieces from the middle if
 	// the terminal is too narrow to fit everything. Order of importance:
-	// logo+user (always) > mode bar > perm badge > activity > sess > project/branch.
+	// logo+user (always) > mode bar > perm badge > agent badge > activity > sess > project/branch.
 	leftPieces := []string{logoBox, user, proj, branch, sess}
-	rightPieces := []string{activity, permBadge, modeBar}
+	rightPieces := []string{activity, agentBadge, permBadge, modeBar}
 	for {
 		left := strings.Join(leftPieces, "")
 		right := strings.Join(rightPieces, "")
@@ -673,7 +682,9 @@ func (m *Model) renderHeader() string {
 		case rightPieces[0] != "":
 			rightPieces[0] = "" // drop activity
 		case len(rightPieces) > 1 && rightPieces[1] != "":
-			rightPieces[1] = "" // drop perm badge
+			rightPieces[1] = "" // drop agent badge
+		case len(rightPieces) > 2 && rightPieces[2] != "":
+			rightPieces[2] = "" // drop perm badge
 		default:
 			// Final fallback — hard truncate the joined string with ANSI-safe
 			// trim. Better a clipped header than a wrapped one.
@@ -730,21 +741,50 @@ func (m *Model) activeFooterStatus() string {
 		elapsed = time.Since(m.activeSince)
 	}
 	verb := "Working"
+	indicatorColor := m.theme.Accent
 	if m.thinking {
 		verb = "Thinking"
+		indicatorColor = m.theme.Thinking
 	}
-	parts := []string{fmt.Sprintf("%s %s %s", spin, verb, formatWorkingElapsed(elapsed))}
+	actor := truncateLineCells(m.agentDisplayName(), 24)
+	leader := foregroundSpan(fmt.Sprintf("%s %s %s", spin, actor, strings.ToLower(verb)), indicatorColor, m.theme.Fg)
+	timer := foregroundSpan(formatWorkingElapsed(elapsed), m.theme.Muted, m.theme.Fg)
+	pulse := workingPulse(m.theme, m.spinnerFrame)
+	parts := []string{leader + " " + timer + " " + pulse}
 	if wf := m.workflowLabel(); wf != "" {
-		parts = append(parts, wf)
+		parts = append(parts, foregroundSpan(wf, m.theme.Accent, m.theme.Fg))
 	}
 	if detail := activeStatusDetail(m.status, m.thinking); detail != "" {
 		parts = append(parts, detail)
 	}
 	if m.thinking && m.thinkingTokens > 0 {
-		parts = append(parts, fmt.Sprintf("%d thinking tokens", m.thinkingTokens))
+		parts = append(parts, foregroundSpan(fmt.Sprintf("%d thinking tokens", m.thinkingTokens), m.theme.Thinking, m.theme.Fg))
 	}
-	parts = append(parts, "Ctrl+C to stop")
-	return strings.Join(parts, " · ")
+	parts = append(parts, foregroundSpan("Ctrl+C", m.theme.Accent, m.theme.Fg)+foregroundSpan(" to stop", m.theme.Muted, m.theme.Fg))
+	return strings.Join(parts, foregroundSpan(" · ", m.theme.Muted, m.theme.Fg))
+}
+
+func foregroundSpan(text string, fg, base lipgloss.Color) string {
+	open := foregroundOpen(fg)
+	close := foregroundOpen(base)
+	if open == "" || close == "" {
+		return text
+	}
+	return open + text + close
+}
+
+func workingPulse(t Theme, frame int) string {
+	frames := []string{"●••", "●●•", "•●●", "••●", "•●•"}
+	pulse := frames[frame%len(frames)]
+	var b strings.Builder
+	for _, r := range pulse {
+		color := t.Muted
+		if r == '●' {
+			color = t.Accent
+		}
+		b.WriteString(foregroundSpan(string(r), color, t.Fg))
+	}
+	return b.String()
 }
 
 func activeStatusDetail(status string, thinking bool) string {
@@ -811,7 +851,7 @@ func (m *Model) rerenderViewport() {
 	var content string
 	if msg := m.streamMsg(); msg != nil {
 		// Render just the streaming message and append.
-		tail := renderMessage(*msg, m.viewport.Width, m.theme)
+		tail := renderMessageWithAgent(*msg, m.viewport.Width, m.theme, m.agentDisplayName())
 		if m.renderedHistory == "" {
 			content = tail
 		} else {
@@ -849,7 +889,7 @@ func (m *Model) renderHistoryPrefix() string {
 		if b.Len() > 0 {
 			b.WriteString("\n")
 		}
-		b.WriteString(renderMessage(msg, m.viewport.Width, m.theme))
+		b.WriteString(renderMessageWithAgent(msg, m.viewport.Width, m.theme, m.agentDisplayName()))
 		_ = i
 	}
 	return b.String()
@@ -858,6 +898,10 @@ func (m *Model) renderHistoryPrefix() string {
 // renderMessage draws a single chat panel. Styled to match the Python Rich
 // look: bordered box per message, role label in the top-left.
 func renderMessage(c chatMsg, width int, t Theme) string {
+	return renderMessageWithAgent(c, width, t, "")
+}
+
+func renderMessageWithAgent(c chatMsg, width int, t Theme, agentName string) string {
 	// Suppress empty assistant bubbles. A finished assistant turn with
 	// no visible text happens when the agent emitted only a QUESTIONS:
 	// block (plan-mode ROUTER 1/2) — the marker is intercepted into
@@ -907,7 +951,11 @@ func renderMessage(c chatMsg, width int, t Theme) string {
 		borderColor = t.UserPanel
 		bodyColor = t.Fg
 	case "assistant":
-		label = "agent"
+		label = cleanAgentName(agentName)
+		if label == "" {
+			label = "agent"
+		}
+		label = truncateLineCells(label, innerW/2)
 		labelColor = t.Accent2
 		borderColor = t.Accent2
 		bodyColor = t.BotPanel

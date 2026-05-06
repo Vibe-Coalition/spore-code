@@ -174,9 +174,12 @@ type Hardware struct {
 // a sibling field (new path) or fall back to gluing GatherContext onto
 // the message content (old path).
 type ServerCapabilities struct {
-	Type           string `json:"type"`
-	ProjectContext bool   `json:"projectContext,omitempty"` // routes projectContext into system prompt
-	SporeVersion   string `json:"sporeVersion,omitempty"`
+	Type             string `json:"type"`
+	ProjectContext   bool   `json:"projectContext,omitempty"` // routes projectContext into system prompt
+	SporeVersion     string `json:"sporeVersion,omitempty"`
+	AgentName        string `json:"agentName,omitempty"`
+	AgentDisplayName string `json:"agentDisplayName,omitempty"`
+	AssistantName    string `json:"assistantName,omitempty"`
 }
 
 // ChatStopped / ChatCleared — /stop and /clear roundtrips.

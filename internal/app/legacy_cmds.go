@@ -203,8 +203,8 @@ func cmdStatus(m *Model, _ []string) (tea.Model, tea.Cmd) {
 	if workflow == "" {
 		workflow = "idle"
 	}
-	m.pushChat("system", fmt.Sprintf("server=%s user=%s session=%s planMode=%t mode=%s workflow=%s",
-		target, m.cfg.Connection.User, m.sess, m.planMode, m.perms.Mode(), workflow))
+	m.pushChat("system", fmt.Sprintf("server=%s user=%s agent=%s session=%s planMode=%t mode=%s workflow=%s",
+		target, m.cfg.Connection.User, m.agentDisplayName(), m.sess, m.planMode, m.perms.Mode(), workflow))
 	return m, nil
 }
 

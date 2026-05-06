@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -296,36 +297,74 @@ func TestLogoMessageUsesThemeAccent(t *testing.T) {
 
 func TestActiveFooterShowsWorkingIndicator(t *testing.T) {
 	m := renderTestModel(120, 24)
+	m.agentName = "Spore Sage"
 	m.startActiveTurn("running tests")
 	m.activeSince = time.Now().Add(-65 * time.Second)
 	m.spinnerFrame = 3
 
 	rendered := m.renderFooter()
-	for _, needle := range []string{"⠸ Working 1m05s", "running tests", "Ctrl+C to stop"} {
-		if !strings.Contains(rendered, needle) {
+	plain := ansi.Strip(rendered)
+	for _, needle := range []string{"⠸ Spore Sage working", "1m0", "running tests", "Ctrl+C to stop"} {
+		if !strings.Contains(plain, needle) {
 			t.Fatalf("active footer missing %q:\n%q", needle, rendered)
 		}
 	}
-	if strings.Contains(rendered, "enter send") {
+	if strings.Contains(plain, "enter send") {
 		t.Fatalf("active footer should replace idle shortcuts:\n%q", rendered)
+	}
+	if accent := foregroundOpen(themeDark.Accent); accent == "" || !strings.Contains(rendered, accent) {
+		t.Fatalf("active footer did not use theme accent:\n%q", rendered)
 	}
 }
 
 func TestActiveFooterShowsThinkingTokens(t *testing.T) {
 	m := renderTestModel(120, 24)
+	m.agentName = "Spore Sage"
 	m.startActiveTurn("thinking…")
 	m.activeSince = time.Now().Add(-2 * time.Second)
 	m.thinking = true
 	m.thinkingTokens = 42
 
 	rendered := m.renderFooter()
-	for _, needle := range []string{"Thinking 0m02s", "42 thinking tokens", "Ctrl+C to stop"} {
-		if !strings.Contains(rendered, needle) {
+	plain := ansi.Strip(rendered)
+	for _, needle := range []string{"Spore Sage thinking", "0m0", "42 thinking tokens", "Ctrl+C to stop"} {
+		if !strings.Contains(plain, needle) {
 			t.Fatalf("thinking footer missing %q:\n%q", needle, rendered)
 		}
 	}
-	if strings.Contains(rendered, "thinking…") {
+	if strings.Contains(plain, "thinking…") {
 		t.Fatalf("thinking footer should avoid duplicate raw status:\n%q", rendered)
+	}
+	if thinking := foregroundOpen(themeDark.Thinking); thinking == "" || !strings.Contains(rendered, thinking) {
+		t.Fatalf("thinking footer did not use theme thinking accent:\n%q", rendered)
+	}
+}
+
+func TestActiveFooterStatusAvoidsFullAnsiResets(t *testing.T) {
+	m := renderTestModel(120, 24)
+	m.startActiveTurn("running tests")
+
+	status := m.activeFooterStatus()
+	if strings.Contains(status, "\x1b[0m") {
+		t.Fatalf("active footer status should not reset background mid-line:\n%q", status)
+	}
+}
+
+func TestAssistantMessageUsesServerAgentName(t *testing.T) {
+	rendered := renderMessageWithAgent(chatMsg{Role: "assistant", Text: "hello"}, 80, themeDark, "Spore Sage")
+	plain := ansi.Strip(rendered)
+	if !strings.Contains(plain, "Spore Sage") {
+		t.Fatalf("assistant label did not use server agent name:\n%q", rendered)
+	}
+}
+
+func TestAgentNameFromCapabilities(t *testing.T) {
+	if got := agentNameFromCapabilities(nil, proto.ServerCapabilities{AgentDisplayName: " Spore   Sage "}); got != "Spore Sage" {
+		t.Fatalf("typed capability agent name mismatch: %q", got)
+	}
+	raw := json.RawMessage(`{"type":"capabilities","agent":{"displayName":"Cedar"}}`)
+	if got := agentNameFromCapabilities(raw, proto.ServerCapabilities{}); got != "Cedar" {
+		t.Fatalf("nested capability agent name mismatch: %q", got)
 	}
 }
 

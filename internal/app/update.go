@@ -849,6 +849,11 @@ func (m *Model) handleFrame(f conn.Frame) tea.Cmd {
 		var caps proto.ServerCapabilities
 		if err := json.Unmarshal(f.Raw, &caps); err == nil {
 			m.serverCaps = caps
+			if name := agentNameFromCapabilities(f.Raw, caps); name != "" && name != m.agentName {
+				m.agentName = name
+				m.historyDirty = true
+				m.viewportDirty = true
+			}
 			if caps.ProjectContext && m.dlog != nil {
 				m.dlog.Info("caps", "projectContext supported by SPORE "+caps.SporeVersion)
 			}
@@ -1234,6 +1239,40 @@ func (m *Model) handleFrame(f conn.Frame) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+func agentNameFromCapabilities(raw json.RawMessage, caps proto.ServerCapabilities) string {
+	for _, name := range []string{caps.AgentDisplayName, caps.AgentName, caps.AssistantName} {
+		if name = cleanAgentName(name); name != "" {
+			return name
+		}
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return ""
+	}
+	for _, key := range []string{"agentDisplayName", "agentName", "assistantName", "displayName", "name"} {
+		if name, ok := obj[key].(string); ok {
+			if name = cleanAgentName(name); name != "" {
+				return name
+			}
+		}
+	}
+	if name, ok := obj["agent"].(string); ok {
+		if name = cleanAgentName(name); name != "" {
+			return name
+		}
+	}
+	if agent, ok := obj["agent"].(map[string]any); ok {
+		for _, key := range []string{"displayName", "name", "agentName"} {
+			if name, ok := agent[key].(string); ok {
+				if name = cleanAgentName(name); name != "" {
+					return name
+				}
+			}
+		}
+	}
+	return ""
 }
 
 func formatUsageSummary(v proto.ChatDone) string {

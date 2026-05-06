@@ -90,6 +90,7 @@ type Model struct {
 	status     string
 	theme      Theme
 	gitBranch  string
+	agentName  string
 
 	// workflowPhase is the typed UI state for the planning/execution flow.
 	// Legacy prose markers still feed it, but render code reads this field
@@ -225,6 +226,22 @@ func (m *Model) clearActiveTurn() {
 	m.thinking = false
 	m.thinkingTokens = 0
 	m.activeSince = time.Time{}
+}
+
+func (m *Model) agentDisplayName() string {
+	if m == nil {
+		return "agent"
+	}
+	if name := cleanAgentName(m.agentName); name != "" {
+		return name
+	}
+	return "agent"
+}
+
+func cleanAgentName(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.Join(strings.Fields(name), " ")
+	return name
 }
 
 // New constructs the initial model.
