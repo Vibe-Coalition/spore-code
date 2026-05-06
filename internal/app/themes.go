@@ -1,6 +1,9 @@
 package app
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/lipgloss"
+)
 
 // Theme is the full semantic palette — direct port of acorn/themes.py.
 // Field names follow Python's snake_case keys converted to Go's CamelCase
@@ -85,18 +88,18 @@ func (t Theme) derive() Theme {
 }
 
 var themeDark = Theme{
-	Name: "dark", Icon: "🌰",
-	Bg: "#1e2030", BgHeader: "#262840", BgInput: "#262840", BgPanel: "#262840",
-	Fg: "#cdd6f4", Border: "#45475a",
-	Accent: "#89b4fa", Accent2: "#cba6f7",
-	Success: "#a6e3a1", Error: "#f38ba8", Warning: "#f9e2af", Info: "#7a8595", Muted: "#6c7086",
-	ToolIcon: "#f9e2af", ToolDone: "#a6e3a1", ReadIcon: "#89b4fa", EditIcon: "#f9e2af",
-	DiffAdd: "#a6e3a1", DiffDel: "#f38ba8",
-	Thinking: "#89b4fa", Usage: "#6c7086",
-	PromptUser: "#89b4fa", PromptProject: "#a6e3a1", PromptBranch: "#f9e2af", PromptSymbol: "#89b4fa",
-	PlanBarFg: "#cdd6f4", PlanBarBg: "#3b3d6b", ExecBarFg: "#cdd6f4", ExecBarBg: "#2b4a3a",
-	PlanLabelFg: "#ffffff", PlanLabelBg: "#5b5dab", ExecLabelFg: "#ffffff", ExecLabelBg: "#3b7a5a",
-	Banner: "#cdd6f4", BannerSub: "#6c7086", CodeTheme: "monokai", Separator: "#45475a",
+	Name: "dark", Icon: "🌙",
+	Bg: "#131511", BgHeader: "#1a1d17", BgInput: "#21241d", BgPanel: "#1a1d17",
+	Fg: "#ece7d5", Border: "#2c2f26",
+	Accent: "#8eb77c", Accent2: "#e38b5f",
+	Success: "#8eb77c", Error: "#d94e3a", Warning: "#e38b5f", Info: "#7aa7d6", Muted: "#706c62",
+	ToolIcon: "#e3b567", ToolDone: "#8eb77c", ReadIcon: "#7aa7d6", EditIcon: "#e38b5f",
+	DiffAdd: "#8eb77c", DiffDel: "#e89488",
+	Thinking: "#7aa7d6", Usage: "#706c62",
+	PromptUser: "#8eb77c", PromptProject: "#ece7d5", PromptBranch: "#e38b5f", PromptSymbol: "#8eb77c",
+	PlanBarFg: "#ece7d5", PlanBarBg: "#2a2d24", ExecBarFg: "#ece7d5", ExecBarBg: "#252d20",
+	PlanLabelFg: "#131511", PlanLabelBg: "#e38b5f", ExecLabelFg: "#131511", ExecLabelBg: "#8eb77c",
+	Banner: "#ece7d5", BannerSub: "#706c62", CodeTheme: "monokai", Separator: "#2c2f26",
 }.derive()
 
 var themeOled = Theme{
@@ -116,17 +119,17 @@ var themeOled = Theme{
 
 var themeLight = Theme{
 	Name: "light", Icon: "☀",
-	Bg: "#fafafa", BgHeader: "#f0f0f0", BgInput: "#f0f0f0", BgPanel: "#f0f0f0",
-	Fg: "#1a1a2e", Border: "#d4d4d8",
-	Accent: "#2563eb", Accent2: "#7c3aed",
-	Success: "#16a34a", Error: "#dc2626", Warning: "#ca8a04", Info: "#71717a", Muted: "#71717a",
-	ToolIcon: "#ca8a04", ToolDone: "#16a34a", ReadIcon: "#2563eb", EditIcon: "#ca8a04",
-	DiffAdd: "#16a34a", DiffDel: "#dc2626",
-	Thinking: "#2563eb", Usage: "#71717a",
-	PromptUser: "#2563eb", PromptProject: "#16a34a", PromptBranch: "#ca8a04", PromptSymbol: "#2563eb",
-	PlanBarFg: "#1a1a2e", PlanBarBg: "#dbeafe", ExecBarFg: "#1a1a2e", ExecBarBg: "#dcfce7",
-	PlanLabelFg: "#ffffff", PlanLabelBg: "#2563eb", ExecLabelFg: "#ffffff", ExecLabelBg: "#16a34a",
-	Banner: "#1a1a2e", BannerSub: "#71717a", CodeTheme: "friendly", Separator: "#d4d4d8",
+	Bg: "#ece7dc", BgHeader: "#f3eddc", BgInput: "#f7f1e0", BgPanel: "#f3eddc",
+	Fg: "#1d211b", Border: "#d6cdbb",
+	Accent: "#b8542a", Accent2: "#3a6aa3",
+	Success: "#5a7a4a", Error: "#b8341c", Warning: "#b8542a", Info: "#3a6aa3", Muted: "#8a8c82",
+	ToolIcon: "#b8542a", ToolDone: "#5a7a4a", ReadIcon: "#3a6aa3", EditIcon: "#b8542a",
+	DiffAdd: "#5a7a4a", DiffDel: "#8a3a1f",
+	Thinking: "#3a6aa3", Usage: "#8a8c82",
+	PromptUser: "#b8542a", PromptProject: "#5a7a4a", PromptBranch: "#3a6aa3", PromptSymbol: "#b8542a",
+	PlanBarFg: "#1d211b", PlanBarBg: "#ead7ca", ExecBarFg: "#1d211b", ExecBarBg: "#dde5d0",
+	PlanLabelFg: "#f7f1e0", PlanLabelBg: "#b8542a", ExecLabelFg: "#f7f1e0", ExecLabelBg: "#5a7a4a",
+	Banner: "#1d211b", BannerSub: "#8a8c82", CodeTheme: "friendly", Separator: "#d6cdbb",
 }.derive()
 
 var themeOak = Theme{
@@ -379,4 +382,49 @@ func AllThemes() []Theme {
 		themeNord, themeDracula, themeSunset, themeOcean, themeCherry,
 		themeCyber, themeGameboy, themeAmber, themePhosphor, themeC64, themeSnes,
 	}
+}
+
+func (m *Model) applyTheme(t Theme) {
+	m.theme = t
+	applyTextareaTheme(&m.input, t)
+	m.historyDirty = true
+	m.viewportDirty = true
+	m.renderedHistory = ""
+	m.historyWidth = -1
+}
+
+func applyTextareaTheme(input *textarea.Model, t Theme) {
+	focused, blurred := textareaStylesForTheme(t)
+	input.FocusedStyle = focused
+	input.BlurredStyle = blurred
+	input.Cursor.Style = lipgloss.NewStyle().Foreground(t.BgInput).Background(t.Accent)
+	input.Cursor.TextStyle = lipgloss.NewStyle().Foreground(t.Fg).Background(t.BgInput)
+	if input.Focused() {
+		_ = input.Focus()
+	} else {
+		input.Blur()
+	}
+}
+
+func textareaStylesForTheme(t Theme) (textarea.Style, textarea.Style) {
+	base := lipgloss.NewStyle().Foreground(t.Fg).Background(t.BgInput)
+	muted := lipgloss.NewStyle().Foreground(t.Muted).Background(t.BgInput)
+	prompt := lipgloss.NewStyle().Foreground(t.Accent).Background(t.BgInput).Bold(true)
+	focused := textarea.Style{
+		Base:        base,
+		CursorLine:  lipgloss.NewStyle().Background(t.BgInput),
+		EndOfBuffer: muted,
+		Placeholder: muted.Italic(true),
+		Prompt:      prompt,
+		Text:        base,
+	}
+	blurred := textarea.Style{
+		Base:        base,
+		CursorLine:  lipgloss.NewStyle().Background(t.BgInput),
+		EndOfBuffer: muted,
+		Placeholder: muted.Italic(true),
+		Prompt:      prompt,
+		Text:        muted,
+	}
+	return focused, blurred
 }

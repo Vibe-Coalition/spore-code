@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -227,6 +228,27 @@ func TestActivityPanelBottomBorderVisibleWhenContentIsTall(t *testing.T) {
 		t.Fatalf("activity panel height mismatch: got %d want %d\n%s", got, bodyH, panel)
 	}
 	assertBottomBorderVisible(t, panel)
+}
+
+func TestApplyThemeStylesInputAndInvalidatesHistory(t *testing.T) {
+	m := renderTestModel(80, 20)
+	m.renderedHistory = "cached"
+	m.historyDirty = false
+	m.viewportDirty = false
+	m.historyWidth = 80
+
+	m.applyTheme(themeLight)
+
+	if got := fmt.Sprint(m.input.FocusedStyle.Base.GetBackground()); got != fmt.Sprint(themeLight.BgInput) {
+		t.Fatalf("input background was not themed: got %s want %s", got, themeLight.BgInput)
+	}
+	if got := fmt.Sprint(m.input.FocusedStyle.Text.GetForeground()); got != fmt.Sprint(themeLight.Fg) {
+		t.Fatalf("input foreground was not themed: got %s want %s", got, themeLight.Fg)
+	}
+	if !m.historyDirty || !m.viewportDirty || m.renderedHistory != "" || m.historyWidth != -1 {
+		t.Fatalf("theme change did not invalidate render cache: dirty=%t viewportDirty=%t history=%q width=%d",
+			m.historyDirty, m.viewportDirty, m.renderedHistory, m.historyWidth)
+	}
 }
 
 func renderTestModel(w, h int) *Model {

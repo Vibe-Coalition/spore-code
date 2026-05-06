@@ -214,14 +214,13 @@ func cmdTheme(m *Model, args []string) (tea.Model, tea.Cmd) {
 		m.pushChat("system", "Current: "+m.theme.Name+"\nAvailable: "+strings.Join(ThemeNames(), ", "))
 		return m, nil
 	}
-	m.theme = themeForName(args[0])
+	m.applyTheme(themeForName(args[0]))
 	m.cfg.Display.Theme = m.theme.Name
 	if err := config.Save(m.cfg); err != nil {
 		m.pushChat("system", "Theme → "+m.theme.Name+"  (save failed: "+err.Error()+")")
 	} else {
 		m.pushChat("system", "Theme → "+m.theme.Name+"  (saved)")
 	}
-	m.historyDirty = true
 	m.rerenderViewport()
 	return m, nil
 }

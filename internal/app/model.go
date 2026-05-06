@@ -256,6 +256,7 @@ func New(cfg *config.Config, cwd, sess string, planMode, isContinue bool) *Model
 		theme:     themeForName(cfg.Display.Theme),
 		gitBranch: gitBranch(cwd),
 	}
+	m.applyTheme(m.theme)
 	m.perms = newTUIPerms(m)
 	m.exec = tools.New(m.perms, cwd, filepath.Join(cwd, ".spore-code", "logs"))
 	m.cmdHistory = loadHistory(cfg.GlobalDir)

@@ -142,6 +142,19 @@ func fitRenderedBlock(s string, width, height int) string {
 	return strings.Join(lines, "\n")
 }
 
+func fitRenderedBlockWithBackground(s string, width, height int, bg lipgloss.Color) string {
+	block := fitRenderedBlock(s, width, height)
+	if width <= 0 || height <= 0 {
+		return block
+	}
+	style := lipgloss.NewStyle().Background(bg).Width(width).MaxWidth(width)
+	lines := strings.Split(block, "\n")
+	for i, line := range lines {
+		lines[i] = style.Render(line)
+	}
+	return strings.Join(lines, "\n")
+}
+
 func clipRenderedLines(s string, maxLines int) string {
 	if maxLines <= 0 {
 		return ""
@@ -240,7 +253,18 @@ func (m *Model) View() string {
 		input = m.permission.view(m.width, maxInputH, m.theme)
 	default:
 		m.input.SetWidth(m.width - 2)
-		inputBorder := borderStyle.Copy().BorderForeground(m.theme.Separator).Width(m.width - 2)
+		inputBorderColor := m.theme.Border
+		if m.planMode {
+			inputBorderColor = m.theme.PlanLabelBg
+		}
+		if m.generating || m.thinking {
+			inputBorderColor = m.theme.Accent
+		}
+		inputBorder := borderStyle.Copy().
+			BorderForeground(inputBorderColor).
+			Foreground(m.theme.Fg).
+			Background(m.theme.BgInput).
+			Width(m.width - 2)
 		input = inputBorder.Render(m.input.View())
 	}
 	inputH := lipgloss.Height(input)
@@ -313,7 +337,7 @@ func (m *Model) View() string {
 		parts = append(parts, suggest)
 	}
 	parts = append(parts, input, footer)
-	return fitRenderedBlock(lipgloss.JoinVertical(lipgloss.Left, parts...), m.width, m.height)
+	return fitRenderedBlockWithBackground(lipgloss.JoinVertical(lipgloss.Left, parts...), m.width, m.height, m.theme.Bg)
 }
 
 // renderSidePanels — kept for the layout pre-pass that needs to know whether
@@ -423,19 +447,19 @@ func (m *Model) renderHeader() string {
 
 	hdrBg := m.theme.BgHeader
 	logoBox := lipgloss.NewStyle().
-		Foreground(m.theme.Accent).Bold(true).
-		Background(hdrBg).
+		Foreground(m.theme.PlanLabelFg).Bold(true).
+		Background(m.theme.Accent).
 		Padding(0, 1).Render("🍄 spore " + Version)
 
 	user := lipgloss.NewStyle().
-		Foreground(m.theme.PromptUser).Background(hdrBg).Bold(true).
+		Foreground(m.theme.PromptUser).Background(m.theme.BgPanel).Bold(true).
 		Padding(0, 1).
 		Render(connIcon + " " + m.cfg.Connection.User)
 
 	// project name + git branch — Python's prompt_user / prompt_project /
 	// prompt_branch trio. Project is the cwd basename.
 	proj := lipgloss.NewStyle().
-		Foreground(m.theme.PromptProject).Background(hdrBg).
+		Foreground(m.theme.PromptProject).Background(hdrBg).Bold(true).
 		Padding(0, 1).
 		Render(dirTag(m.cwd))
 	branch := ""
@@ -443,7 +467,7 @@ func (m *Model) renderHeader() string {
 		branch = lipgloss.NewStyle().
 			Foreground(m.theme.PromptBranch).Background(hdrBg).
 			Padding(0, 1).
-			Render(" " + br)
+			Render("git:" + br)
 	}
 
 	sess := lipgloss.NewStyle().
@@ -476,7 +500,7 @@ func (m *Model) renderHeader() string {
 	if m.perms != nil {
 		mp := string(m.perms.Mode())
 		permBadge = lipgloss.NewStyle().
-			Foreground(m.theme.Muted).Background(hdrBg).
+			Foreground(m.theme.Muted).Background(m.theme.BgPanel).
 			Padding(0, 1).
 			Render("perm:" + mp)
 	}
@@ -534,6 +558,8 @@ func (m *Model) renderFooter() string {
 		Foreground(m.theme.Muted).
 		Background(m.theme.BgPanel).
 		Padding(0, 1).
+		Border(lipgloss.NormalBorder(), true, false, false, false).
+		BorderForeground(m.theme.Separator).
 		Width(m.width).
 		MaxWidth(m.width).
 		Render(status)
@@ -652,6 +678,7 @@ func renderMessage(c chatMsg, width int, t Theme) string {
 		}
 		return lipgloss.NewStyle().
 			Foreground(t.System).Italic(true).
+			Background(t.Bg).
 			Render(strings.Join(lines, "\n"))
 	}
 
@@ -660,7 +687,7 @@ func renderMessage(c chatMsg, width int, t Theme) string {
 		innerW = 20
 	}
 
-	var labelColor, borderColor, bodyColor lipgloss.Color
+	var labelColor, borderColor, bodyColor, surface lipgloss.Color
 	var label string
 	switch c.Role {
 	case "user":
@@ -668,16 +695,19 @@ func renderMessage(c chatMsg, width int, t Theme) string {
 		labelColor = t.UserPanel
 		borderColor = t.UserPanel
 		bodyColor = t.Fg
+		surface = t.BgInput
 	case "assistant":
 		label = "agent"
 		labelColor = t.Accent2
 		borderColor = t.Accent2
 		bodyColor = t.BotPanel
+		surface = t.BgPanel
 	default:
 		label = c.Role
 		labelColor = t.Muted
 		borderColor = t.Separator
 		bodyColor = t.Muted
+		surface = t.BgPanel
 	}
 
 	head := lipgloss.NewStyle().
@@ -705,6 +735,7 @@ func renderMessage(c chatMsg, width int, t Theme) string {
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(borderColor).
+		Background(surface).
 		Foreground(bodyColor).
 		Padding(0, 1).
 		Width(width - 2).
@@ -856,7 +887,7 @@ func (m *Model) renderOutputLog() string {
 
 	scroll := scrollbar(&m.outputLogVP, m.outputLogVP.Height, m.theme)
 	body2 := lipgloss.JoinHorizontal(lipgloss.Top, m.outputLogVP.View(), scroll)
-	return lipgloss.JoinVertical(lipgloss.Left, header, body2, footer)
+	return fitRenderedBlockWithBackground(lipgloss.JoinVertical(lipgloss.Left, header, body2, footer), m.width, m.height, m.theme.Bg)
 }
 
 // Unused helpers kept for potential future use.
