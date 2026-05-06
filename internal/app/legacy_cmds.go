@@ -214,6 +214,10 @@ func cmdTheme(m *Model, args []string) (tea.Model, tea.Cmd) {
 		m.pushChat("system", "Current: "+m.theme.Name+"\nAvailable: "+strings.Join(ThemeNames(), ", "))
 		return m, nil
 	}
+	if !isThemeName(args[0]) {
+		m.pushChat("system", "Unknown theme: "+args[0]+"\nAvailable: "+strings.Join(ThemeNames(), ", "))
+		return m, nil
+	}
 	m.applyTheme(themeForName(args[0]))
 	m.cfg.Display.Theme = m.theme.Name
 	if err := config.Save(m.cfg); err != nil {
@@ -503,7 +507,7 @@ func init() {
 	register(&slashCmd{Name: "/stop", Help: "stop the current generation", Handler: cmdStop})
 	register(&slashCmd{Name: "/plan", Help: "toggle plan/execute mode (same as Shift+Tab)", Handler: cmdPlan})
 	register(&slashCmd{Name: "/status", Help: "connection + session info", Handler: cmdStatus})
-	register(&slashCmd{Name: "/theme", Help: "switch theme (dark/oak/forest/oled/light/…)", Handler: cmdTheme})
+	register(&slashCmd{Name: "/theme", Help: "switch theme (dark/light)", Handler: cmdTheme})
 	register(&slashCmd{Name: "/display", Help: "toggle optional UI: thinking/tools/usage on|off", Handler: cmdDisplay})
 	register(&slashCmd{Name: "/mode", Help: "tool approval mode (auto/ask/locked/yolo/rules)", Handler: cmdMode})
 	register(&slashCmd{Name: "/approve-all", Help: "shortcut for /mode auto", Handler: cmdApproveAll})

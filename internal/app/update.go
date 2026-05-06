@@ -1500,7 +1500,7 @@ func SlashHelp() string {
 		"/stop — stop the current generation",
 		"/plan — toggle plan/execute mode (same as Shift+Tab)",
 		"/status — connection info",
-		"/theme <name> — switch theme (dark, oak, forest, oled, light)",
+		"/theme <name> — switch theme (dark, light)",
 		"/mode <auto|ask|locked|yolo|rules> — tool approval mode",
 		"/approve-all — shortcut for /mode auto",
 		"/approve-all-dangerous — shortcut for /mode yolo",

@@ -1,6 +1,8 @@
 package app
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -327,61 +329,35 @@ var themeSnes = Theme{
 	Banner: "#b0a0e0", BannerSub: "#a09c98", CodeTheme: "monokai", Separator: "#584a70",
 }.derive()
 
-// themeForName returns the named theme, falling back to dark.
+// themeForName returns the named theme, falling back to dark. Older saved
+// theme names from the pre-two-theme CLI intentionally normalize to dark.
 func themeForName(name string) Theme {
-	switch name {
+	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "dark", "":
 		return themeDark
-	case "oled":
-		return themeOled
 	case "light":
 		return themeLight
-	case "oak":
-		return themeOak
-	case "forest":
-		return themeForest
-	case "nord":
-		return themeNord
-	case "dracula":
-		return themeDracula
-	case "sunset":
-		return themeSunset
-	case "ocean":
-		return themeOcean
-	case "cherry":
-		return themeCherry
-	case "cyber":
-		return themeCyber
-	case "gameboy":
-		return themeGameboy
-	case "amber":
-		return themeAmber
-	case "phosphor":
-		return themePhosphor
-	case "c64":
-		return themeC64
-	case "snes":
-		return themeSnes
 	}
 	return themeDark
 }
 
-// ThemeNames returns the order shown by /theme — same order Python uses.
-func ThemeNames() []string {
-	return []string{
-		"dark", "oled", "light", "oak", "forest",
-		"nord", "dracula", "sunset", "ocean", "cherry",
-		"cyber", "gameboy", "amber", "phosphor", "c64", "snes",
+func isThemeName(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "dark", "light":
+		return true
+	default:
+		return false
 	}
 }
 
-// AllThemes returns every theme value — used by the wizard for swatches.
+// ThemeNames returns the order shown by /theme.
+func ThemeNames() []string {
+	return []string{"dark", "light"}
+}
+
+// AllThemes returns every exposed theme value — used by the wizard for swatches.
 func AllThemes() []Theme {
-	return []Theme{
-		themeDark, themeOled, themeLight, themeOak, themeForest,
-		themeNord, themeDracula, themeSunset, themeOcean, themeCherry,
-		themeCyber, themeGameboy, themeAmber, themePhosphor, themeC64, themeSnes,
-	}
+	return []Theme{themeDark, themeLight}
 }
 
 func (m *Model) applyTheme(t Theme) {

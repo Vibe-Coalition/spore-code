@@ -127,9 +127,8 @@ func runSetupWizard() (*config.Config, error) {
 	}
 	fmt.Println()
 
-	// 5. Theme — show every theme with its icon and a swatch row so the
-	// user can preview the palette before picking. Mirrors the Textual
-	// wizard's theme step in acorn/setup.py.
+	// 5. Theme — show the current two-theme palette with swatches so the
+	// user can preview the choice before picking.
 	fmt.Println("5. Choose a theme")
 	all := app.AllThemes()
 	for _, t := range all {

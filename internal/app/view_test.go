@@ -251,6 +251,19 @@ func TestApplyThemeStylesInputAndInvalidatesHistory(t *testing.T) {
 	}
 }
 
+func TestThemeMarkdownDoesNotEmitBlackBackgroundPatches(t *testing.T) {
+	msg := chatMsg{
+		Role: "assistant",
+		Text: "Here is code:\n\n```go\nfmt.Println(\"hi\")\n```\n\nDone.",
+	}
+	rendered := renderMessage(msg, 80, themeLight)
+	for _, needle := range []string{"\x1b[40m", "\x1b[48;5;0m", "\x1b[48;2;0;0;0m"} {
+		if strings.Contains(rendered, needle) {
+			t.Fatalf("rendered markdown contains black background escape %q:\n%q", needle, rendered)
+		}
+	}
+}
+
 func renderTestModel(w, h int) *Model {
 	ta := textarea.New()
 	ta.SetHeight(3)

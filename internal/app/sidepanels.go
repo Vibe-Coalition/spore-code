@@ -248,17 +248,16 @@ func (m *Model) renderCodePanel(width, maxH int) string {
 		bodyLines = bodyLines[len(bodyLines)-bodyH:]
 	}
 	innerLines := append([]string{titleRow, ""}, bodyLines...)
-	return renderPanelFrame(width, maxH, m.theme.Accent2, m.theme.BgPanel, innerLines)
+	return renderPanelFrame(width, maxH, m.theme.Accent2, innerLines)
 }
 
-func renderPanelFrame(width, height int, borderColor, bg lipgloss.Color, lines []string) string {
+func renderPanelFrame(width, height int, borderColor lipgloss.Color, lines []string) string {
 	if width < 4 || height < 2 {
 		return ""
 	}
 	innerW := width - 4 // border + one-cell horizontal padding on both sides
 	horizW := width - 2
-	border := lipgloss.NewStyle().Foreground(borderColor).Background(bg)
-	content := lipgloss.NewStyle().Background(bg)
+	border := lipgloss.NewStyle().Foreground(borderColor)
 	out := make([]string, 0, height)
 	out = append(out, border.Render("╭"+strings.Repeat("─", horizW)+"╮"))
 	contentH := height - 2
@@ -271,7 +270,7 @@ func renderPanelFrame(width, height int, borderColor, bg lipgloss.Color, lines [
 		if padW < 0 {
 			padW = 0
 		}
-		out = append(out, border.Render("│")+content.Render(" "+line+strings.Repeat(" ", padW)+" ")+border.Render("│"))
+		out = append(out, border.Render("│")+" "+line+strings.Repeat(" ", padW)+" "+border.Render("│"))
 	}
 	out = append(out, border.Render("╰"+strings.Repeat("─", horizW)+"╯"))
 	return strings.Join(out, "\n")
@@ -664,7 +663,7 @@ func (m *Model) renderPlanTasksPanel(width, maxH int) string {
 	}
 	bodyLines = clipLinesTail(bodyLines, bodyLimit)
 	innerLines := append([]string{truncateLineCells(title, width-4), ""}, bodyLines...)
-	return renderPanelFrame(width, maxH, m.theme.Accent2, m.theme.BgPanel, innerLines)
+	return renderPanelFrame(width, maxH, m.theme.Accent2, innerLines)
 }
 
 // pruneSubagents — called when a new user turn begins (chat:start).
@@ -792,7 +791,7 @@ func (m *Model) renderSubagentPanel(width, maxH int) string {
 	}
 	bodyLines = clipLinesTail(bodyLines, bodyLimit)
 	innerLines := append([]string{truncateLineCells(title, width-4), ""}, bodyLines...)
-	return renderPanelFrame(width, maxH, m.theme.Accent2, m.theme.BgPanel, innerLines)
+	return renderPanelFrame(width, maxH, m.theme.Accent2, innerLines)
 }
 
 // renderExpandedPanel — full-screen activity browser (Ctrl+P view) with
@@ -826,7 +825,6 @@ func (m *Model) renderExpandedPanel() string {
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(m.theme.Accent).
-		Background(m.theme.BgPanel).
 		Foreground(m.theme.Fg).
 		Padding(1, 2).
 		Width(m.width - 2).

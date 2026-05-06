@@ -37,13 +37,9 @@ var slashCatalog = []slashEntry{
 	{"/plan", "toggle plan/execute mode (same as Shift+Tab)"},
 	{"/status", "connection + session info"},
 
-	// Theme — name hints kept in the parent description so users
-	// browsing the list can see them at a glance.
-	{"/theme", "switch theme (dark/oak/forest/oled/light/…)"},
+	// Theme — mirrors spore-core's current two-theme system.
+	{"/theme", "switch theme (dark/light)"},
 	{"/theme dark", "switch to dark theme"},
-	{"/theme oak", "switch to oak theme"},
-	{"/theme forest", "switch to forest theme"},
-	{"/theme oled", "switch to oled theme"},
 	{"/theme light", "switch to light theme"},
 
 	{"/display", "toggle optional UI surfaces"},

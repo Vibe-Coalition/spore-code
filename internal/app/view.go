@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/glamour"
+	glamouransi "github.com/charmbracelet/glamour/ansi"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -23,21 +24,21 @@ var (
 
 const glamourCacheMax = 6
 
-// glamourRenderer returns a renderer for the given style + word width.
+// glamourRenderer returns a renderer for the given theme + word width.
 // Falls back to nil on construction failure — callers must handle that.
 // Evicts oldest entries when the cache grows past glamourCacheMax.
-func glamourRenderer(style string, width int) *glamour.TermRenderer {
+func glamourRenderer(t Theme, width int) *glamour.TermRenderer {
 	if width < 20 {
 		width = 20
 	}
-	key := fmt.Sprintf("%s|%d", style, width)
+	key := fmt.Sprintf("%s|%s|%s|%d", t.Name, t.Fg, t.Accent, width)
 	glamourMu.Lock()
 	defer glamourMu.Unlock()
 	if r, ok := glamourCache[key]; ok {
 		return r
 	}
 	r, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle(style),
+		glamour.WithStyles(markdownStyleForTheme(t)),
 		glamour.WithWordWrap(width),
 	)
 	if err != nil {
@@ -60,14 +61,96 @@ func glamourRenderer(style string, width int) *glamour.TermRenderer {
 	return r
 }
 
-// glamourStyleForTheme picks a glamour style name compatible with the
-// theme's brightness. glamour ships "dark", "light", "notty", "auto" etc.
-func glamourStyleForTheme(t Theme) string {
-	switch t.Name {
-	case "light", "arctic":
-		return "light"
+func markdownStyleForTheme(t Theme) glamouransi.StyleConfig {
+	return glamouransi.StyleConfig{
+		Document: glamouransi.StyleBlock{
+			StylePrimitive: glamouransi.StylePrimitive{},
+			Margin:         uintPtr(0),
+		},
+		BlockQuote: glamouransi.StyleBlock{
+			StylePrimitive: glamouransi.StylePrimitive{Color: colorPtr(t.Muted)},
+			Indent:         uintPtr(1),
+			IndentToken:    strPtr("│ "),
+		},
+		Paragraph: glamouransi.StyleBlock{},
+		List: glamouransi.StyleList{
+			StyleBlock:  glamouransi.StyleBlock{},
+			LevelIndent: 4,
+		},
+		Heading: glamouransi.StyleBlock{
+			StylePrimitive: glamouransi.StylePrimitive{
+				Color:       colorPtr(t.Banner),
+				Bold:        boolPtr(true),
+				BlockSuffix: "\n",
+			},
+		},
+		H1:   glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{Prefix: "# "}},
+		H2:   glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{Prefix: "## "}},
+		H3:   glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{Prefix: "### "}},
+		H4:   glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{Prefix: "#### "}},
+		H5:   glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{Prefix: "##### "}},
+		H6:   glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{Prefix: "###### "}},
+		Text: glamouransi.StylePrimitive{Color: colorPtr(t.Fg)},
+		Emph: glamouransi.StylePrimitive{
+			Color:  colorPtr(t.Accent2),
+			Italic: boolPtr(true),
+		},
+		Strong: glamouransi.StylePrimitive{
+			Color: colorPtr(t.Banner),
+			Bold:  boolPtr(true),
+		},
+		HorizontalRule: glamouransi.StylePrimitive{
+			Color:  colorPtr(t.Separator),
+			Format: "\n──────\n",
+		},
+		Item:        glamouransi.StylePrimitive{BlockPrefix: "• "},
+		Enumeration: glamouransi.StylePrimitive{BlockPrefix: ". "},
+		Task: glamouransi.StyleTask{
+			Ticked:   "[✓] ",
+			Unticked: "[ ] ",
+		},
+		Link: glamouransi.StylePrimitive{
+			Color:     colorPtr(t.Info),
+			Underline: boolPtr(true),
+		},
+		LinkText: glamouransi.StylePrimitive{Color: colorPtr(t.Info)},
+		Code: glamouransi.StyleBlock{
+			StylePrimitive: glamouransi.StylePrimitive{
+				Color:  colorPtr(t.Accent),
+				Prefix: "`",
+				Suffix: "`",
+			},
+		},
+		CodeBlock: glamouransi.StyleCodeBlock{
+			StyleBlock: glamouransi.StyleBlock{
+				StylePrimitive: glamouransi.StylePrimitive{Color: colorPtr(t.Fg)},
+				Margin:         uintPtr(1),
+			},
+		},
+		Table: glamouransi.StyleTable{
+			CenterSeparator: strPtr("│"),
+			ColumnSeparator: strPtr("│"),
+			RowSeparator:    strPtr("─"),
+		},
+		DefinitionDescription: glamouransi.StylePrimitive{BlockPrefix: "\n• "},
 	}
-	return "dark"
+}
+
+func colorPtr(c lipgloss.Color) *string {
+	s := string(c)
+	return &s
+}
+
+func strPtr(s string) *string {
+	return &s
+}
+
+func boolPtr(b bool) *bool {
+	return &b
+}
+
+func uintPtr(n uint) *uint {
+	return &n
 }
 
 // renderMarkdown runs text through glamour and clamps each output line
@@ -83,7 +166,7 @@ func glamourStyleForTheme(t Theme) string {
 // Returns the original text unchanged if glamour fails (so we never
 // silently drop a message).
 func renderMarkdown(text string, width int, t Theme) string {
-	r := glamourRenderer(glamourStyleForTheme(t), width)
+	r := glamourRenderer(t, width)
 	if r == nil {
 		return text
 	}
@@ -138,19 +221,6 @@ func fitRenderedBlock(s string, width, height int) string {
 	}
 	for len(lines) < height {
 		lines = append(lines, "")
-	}
-	return strings.Join(lines, "\n")
-}
-
-func fitRenderedBlockWithBackground(s string, width, height int, bg lipgloss.Color) string {
-	block := fitRenderedBlock(s, width, height)
-	if width <= 0 || height <= 0 {
-		return block
-	}
-	style := lipgloss.NewStyle().Background(bg).Width(width).MaxWidth(width)
-	lines := strings.Split(block, "\n")
-	for i, line := range lines {
-		lines[i] = style.Render(line)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -263,7 +333,6 @@ func (m *Model) View() string {
 		inputBorder := borderStyle.Copy().
 			BorderForeground(inputBorderColor).
 			Foreground(m.theme.Fg).
-			Background(m.theme.BgInput).
 			Width(m.width - 2)
 		input = inputBorder.Render(m.input.View())
 	}
@@ -337,7 +406,7 @@ func (m *Model) View() string {
 		parts = append(parts, suggest)
 	}
 	parts = append(parts, input, footer)
-	return fitRenderedBlockWithBackground(lipgloss.JoinVertical(lipgloss.Left, parts...), m.width, m.height, m.theme.Bg)
+	return fitRenderedBlock(lipgloss.JoinVertical(lipgloss.Left, parts...), m.width, m.height)
 }
 
 // renderSidePanels — kept for the layout pre-pass that needs to know whether
@@ -678,7 +747,6 @@ func renderMessage(c chatMsg, width int, t Theme) string {
 		}
 		return lipgloss.NewStyle().
 			Foreground(t.System).Italic(true).
-			Background(t.Bg).
 			Render(strings.Join(lines, "\n"))
 	}
 
@@ -687,7 +755,7 @@ func renderMessage(c chatMsg, width int, t Theme) string {
 		innerW = 20
 	}
 
-	var labelColor, borderColor, bodyColor, surface lipgloss.Color
+	var labelColor, borderColor, bodyColor lipgloss.Color
 	var label string
 	switch c.Role {
 	case "user":
@@ -695,19 +763,16 @@ func renderMessage(c chatMsg, width int, t Theme) string {
 		labelColor = t.UserPanel
 		borderColor = t.UserPanel
 		bodyColor = t.Fg
-		surface = t.BgInput
 	case "assistant":
 		label = "agent"
 		labelColor = t.Accent2
 		borderColor = t.Accent2
 		bodyColor = t.BotPanel
-		surface = t.BgPanel
 	default:
 		label = c.Role
 		labelColor = t.Muted
 		borderColor = t.Separator
 		bodyColor = t.Muted
-		surface = t.BgPanel
 	}
 
 	head := lipgloss.NewStyle().
@@ -735,7 +800,6 @@ func renderMessage(c chatMsg, width int, t Theme) string {
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(borderColor).
-		Background(surface).
 		Foreground(bodyColor).
 		Padding(0, 1).
 		Width(width - 2).
@@ -887,7 +951,7 @@ func (m *Model) renderOutputLog() string {
 
 	scroll := scrollbar(&m.outputLogVP, m.outputLogVP.Height, m.theme)
 	body2 := lipgloss.JoinHorizontal(lipgloss.Top, m.outputLogVP.View(), scroll)
-	return fitRenderedBlockWithBackground(lipgloss.JoinVertical(lipgloss.Left, header, body2, footer), m.width, m.height, m.theme.Bg)
+	return fitRenderedBlock(lipgloss.JoinVertical(lipgloss.Left, header, body2, footer), m.width, m.height)
 }
 
 // Unused helpers kept for potential future use.
