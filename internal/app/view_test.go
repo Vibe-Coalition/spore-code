@@ -264,6 +264,25 @@ func TestThemeMarkdownDoesNotEmitBlackBackgroundPatches(t *testing.T) {
 	}
 }
 
+func TestViewPaintsBaseBackgroundWithoutResetHoles(t *testing.T) {
+	m := renderTestModel(80, 20)
+	m.applyTheme(themeLight)
+	m.messages = []chatMsg{{
+		Role: "assistant",
+		Text: "Here is code:\n\n```go\nfmt.Println(\"hi\")\n```\n\nDone.",
+	}}
+
+	out := m.View()
+	bg := backgroundOpen(themeLight.Bg)
+	if bg == "" || !strings.Contains(out, bg) {
+		t.Fatalf("view did not paint base theme background")
+	}
+	if strings.Contains(out, "\x1b[0m") && !strings.Contains(out, "\x1b[0m"+bg) {
+		t.Fatalf("view has ANSI resets that do not restore base background:\n%q", out)
+	}
+	assertViewFits(t, m)
+}
+
 func renderTestModel(w, h int) *Model {
 	ta := textarea.New()
 	ta.SetHeight(3)

@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -225,6 +226,61 @@ func fitRenderedBlock(s string, width, height int) string {
 	return strings.Join(lines, "\n")
 }
 
+func fitRenderedBlockWithBackground(s string, width, height int, bg lipgloss.Color) string {
+	if height <= 0 {
+		return ""
+	}
+	lines := strings.Split(s, "\n")
+	if len(lines) > height {
+		lines = lines[:height]
+	}
+	for i, line := range lines {
+		lines[i] = paintLineBackground(truncateCells(line, width), width, bg)
+	}
+	for len(lines) < height {
+		lines = append(lines, paintLineBackground("", width, bg))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func paintLineBackground(line string, width int, bg lipgloss.Color) string {
+	if width <= 0 {
+		return line
+	}
+	open := backgroundOpen(bg)
+	if open == "" {
+		return line
+	}
+	line = strings.ReplaceAll(line, "\x1b[0m", "\x1b[0m"+open)
+	line = strings.ReplaceAll(line, "\x1b[m", "\x1b[m"+open)
+	padW := width - ansi.StringWidth(line)
+	if padW < 0 {
+		padW = 0
+	}
+	return open + line + strings.Repeat(" ", padW) + "\x1b[0m"
+}
+
+func backgroundOpen(bg lipgloss.Color) string {
+	raw := string(bg)
+	if strings.HasPrefix(raw, "#") && len(raw) == 7 {
+		r, rErr := strconv.ParseUint(raw[1:3], 16, 8)
+		g, gErr := strconv.ParseUint(raw[3:5], 16, 8)
+		b, bErr := strconv.ParseUint(raw[5:7], 16, 8)
+		if rErr == nil && gErr == nil && bErr == nil {
+			return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", r, g, b)
+		}
+	}
+	if n, err := strconv.Atoi(raw); err == nil && n >= 0 && n <= 255 {
+		return fmt.Sprintf("\x1b[48;5;%dm", n)
+	}
+	sample := lipgloss.NewStyle().Background(bg).Render("x")
+	idx := strings.Index(sample, "x")
+	if idx <= 0 {
+		return ""
+	}
+	return sample[:idx]
+}
+
 func clipRenderedLines(s string, maxLines int) string {
 	if maxLines <= 0 {
 		return ""
@@ -406,7 +462,7 @@ func (m *Model) View() string {
 		parts = append(parts, suggest)
 	}
 	parts = append(parts, input, footer)
-	return fitRenderedBlock(lipgloss.JoinVertical(lipgloss.Left, parts...), m.width, m.height)
+	return fitRenderedBlockWithBackground(lipgloss.JoinVertical(lipgloss.Left, parts...), m.width, m.height, m.theme.Bg)
 }
 
 // renderSidePanels — kept for the layout pre-pass that needs to know whether
@@ -951,7 +1007,7 @@ func (m *Model) renderOutputLog() string {
 
 	scroll := scrollbar(&m.outputLogVP, m.outputLogVP.Height, m.theme)
 	body2 := lipgloss.JoinHorizontal(lipgloss.Top, m.outputLogVP.View(), scroll)
-	return fitRenderedBlock(lipgloss.JoinVertical(lipgloss.Left, header, body2, footer), m.width, m.height)
+	return fitRenderedBlockWithBackground(lipgloss.JoinVertical(lipgloss.Left, header, body2, footer), m.width, m.height, m.theme.Bg)
 }
 
 // Unused helpers kept for potential future use.
