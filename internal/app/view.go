@@ -741,26 +741,24 @@ func (m *Model) activeFooterStatus() string {
 		elapsed = time.Since(m.activeSince)
 	}
 	verb := "Working"
-	indicatorColor := m.theme.Accent
 	if m.thinking {
 		verb = "Thinking"
-		indicatorColor = m.theme.Thinking
 	}
 	actor := truncateLineCells(m.agentDisplayName(), 24)
-	leader := foregroundSpan(fmt.Sprintf("%s %s %s", spin, actor, strings.ToLower(verb)), indicatorColor, m.theme.Fg)
+	fadeColor := activeAccentColor(m.theme, m.spinnerFrame, m.thinking)
+	leader := foregroundSpan(fmt.Sprintf("%s %s %s", spin, actor, strings.ToLower(verb)), fadeColor, m.theme.Fg)
 	timer := foregroundSpan(formatWorkingElapsed(elapsed), m.theme.Muted, m.theme.Fg)
-	pulse := workingPulse(m.theme, m.spinnerFrame)
-	parts := []string{leader + " " + timer + " " + pulse}
+	parts := []string{leader + " " + timer}
 	if wf := m.workflowLabel(); wf != "" {
-		parts = append(parts, foregroundSpan(wf, m.theme.Accent, m.theme.Fg))
+		parts = append(parts, foregroundSpan(wf, fadeColor, m.theme.Fg))
 	}
 	if detail := activeStatusDetail(m.status, m.thinking); detail != "" {
 		parts = append(parts, detail)
 	}
 	if m.thinking && m.thinkingTokens > 0 {
-		parts = append(parts, foregroundSpan(fmt.Sprintf("%d thinking tokens", m.thinkingTokens), m.theme.Thinking, m.theme.Fg))
+		parts = append(parts, foregroundSpan(fmt.Sprintf("%d thinking tokens", m.thinkingTokens), fadeColor, m.theme.Fg))
 	}
-	parts = append(parts, foregroundSpan("Ctrl+C", m.theme.Accent, m.theme.Fg)+foregroundSpan(" to stop", m.theme.Muted, m.theme.Fg))
+	parts = append(parts, foregroundSpan("Ctrl+C", fadeColor, m.theme.Fg)+foregroundSpan(" to stop", m.theme.Muted, m.theme.Fg))
 	return strings.Join(parts, foregroundSpan(" · ", m.theme.Muted, m.theme.Fg))
 }
 
@@ -773,18 +771,58 @@ func foregroundSpan(text string, fg, base lipgloss.Color) string {
 	return open + text + close
 }
 
-func workingPulse(t Theme, frame int) string {
-	frames := []string{"●••", "●●•", "•●●", "••●", "•●•"}
-	pulse := frames[frame%len(frames)]
-	var b strings.Builder
-	for _, r := range pulse {
-		color := t.Muted
-		if r == '●' {
-			color = t.Accent
-		}
-		b.WriteString(foregroundSpan(string(r), color, t.Fg))
+func activeAccentColor(t Theme, frame int, thinking bool) lipgloss.Color {
+	from := t.Accent
+	if thinking {
+		from = t.Thinking
 	}
-	return b.String()
+	if color, ok := crossfadeColor(from, t.Fg, frame); ok {
+		return color
+	}
+	phase := frame % 20
+	if phase < 0 {
+		phase += 20
+	}
+	if phase < 10 {
+		return from
+	}
+	return t.Fg
+}
+
+func crossfadeColor(from, to lipgloss.Color, frame int) (lipgloss.Color, bool) {
+	fr, fg, fb, ok := parseHexRGB(from)
+	if !ok {
+		return "", false
+	}
+	tr, tg, tb, ok := parseHexRGB(to)
+	if !ok {
+		return "", false
+	}
+	phase := frame % 20
+	if phase < 0 {
+		phase += 20
+	}
+	if phase > 10 {
+		phase = 20 - phase
+	}
+	mix := func(a, b int) int {
+		return a + (b-a)*phase/10
+	}
+	return lipgloss.Color(fmt.Sprintf("#%02x%02x%02x", mix(fr, tr), mix(fg, tg), mix(fb, tb))), true
+}
+
+func parseHexRGB(c lipgloss.Color) (int, int, int, bool) {
+	raw := string(c)
+	if !strings.HasPrefix(raw, "#") || len(raw) != 7 {
+		return 0, 0, 0, false
+	}
+	r, rErr := strconv.ParseUint(raw[1:3], 16, 8)
+	g, gErr := strconv.ParseUint(raw[3:5], 16, 8)
+	b, bErr := strconv.ParseUint(raw[5:7], 16, 8)
+	if rErr != nil || gErr != nil || bErr != nil {
+		return 0, 0, 0, false
+	}
+	return int(r), int(g), int(b), true
 }
 
 func activeStatusDetail(status string, thinking bool) string {

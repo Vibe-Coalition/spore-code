@@ -312,8 +312,11 @@ func TestActiveFooterShowsWorkingIndicator(t *testing.T) {
 	if strings.Contains(plain, "enter send") {
 		t.Fatalf("active footer should replace idle shortcuts:\n%q", rendered)
 	}
-	if accent := foregroundOpen(themeDark.Accent); accent == "" || !strings.Contains(rendered, accent) {
-		t.Fatalf("active footer did not use theme accent:\n%q", rendered)
+	if strings.ContainsAny(plain, "●•") {
+		t.Fatalf("active footer should animate text color, not pulse glyphs:\n%q", rendered)
+	}
+	if fade := foregroundOpen(activeAccentColor(themeDark, m.spinnerFrame, false)); fade == "" || !strings.Contains(rendered, fade) {
+		t.Fatalf("active footer did not use cross-faded theme accent:\n%q", rendered)
 	}
 }
 
@@ -335,8 +338,11 @@ func TestActiveFooterShowsThinkingTokens(t *testing.T) {
 	if strings.Contains(plain, "thinking…") {
 		t.Fatalf("thinking footer should avoid duplicate raw status:\n%q", rendered)
 	}
-	if thinking := foregroundOpen(themeDark.Thinking); thinking == "" || !strings.Contains(rendered, thinking) {
-		t.Fatalf("thinking footer did not use theme thinking accent:\n%q", rendered)
+	if strings.ContainsAny(plain, "●•") {
+		t.Fatalf("thinking footer should animate text color, not pulse glyphs:\n%q", rendered)
+	}
+	if thinking := foregroundOpen(activeAccentColor(themeDark, m.spinnerFrame, true)); thinking == "" || !strings.Contains(rendered, thinking) {
+		t.Fatalf("thinking footer did not use cross-faded thinking accent:\n%q", rendered)
 	}
 }
 
@@ -347,6 +353,20 @@ func TestActiveFooterStatusAvoidsFullAnsiResets(t *testing.T) {
 	status := m.activeFooterStatus()
 	if strings.Contains(status, "\x1b[0m") {
 		t.Fatalf("active footer status should not reset background mid-line:\n%q", status)
+	}
+}
+
+func TestActiveFooterAccentColorCrossfades(t *testing.T) {
+	start := activeAccentColor(themeDark, 0, false)
+	mid := activeAccentColor(themeDark, 5, false)
+	if start == mid {
+		t.Fatalf("accent color should cross-fade over spinner frames: start=%s mid=%s", start, mid)
+	}
+	if got := foregroundOpen(start); got == "" || !strings.Contains(got, "38;2") {
+		t.Fatalf("expected truecolor start accent escape, got %q", got)
+	}
+	if got := foregroundOpen(mid); got == "" || !strings.Contains(got, "38;2") {
+		t.Fatalf("expected truecolor mid accent escape, got %q", got)
 	}
 }
 
