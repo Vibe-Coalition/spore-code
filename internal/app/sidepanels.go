@@ -247,23 +247,33 @@ func (m *Model) renderCodePanel(width, maxH int) string {
 	if len(bodyLines) > bodyH {
 		bodyLines = bodyLines[len(bodyLines)-bodyH:]
 	}
-	inner := titleRow + "\n\n" + strings.Join(bodyLines, "\n")
+	innerLines := append([]string{titleRow, ""}, bodyLines...)
+	return renderPanelFrame(width, maxH, m.theme.Accent2, innerLines)
+}
 
-	// Drop MaxHeight: it caused last-line shaving when the inner
-	// content's measured height disagreed with our \n-split count
-	// (ANSI escape codes in styled lines + lipgloss display-width
-	// counting). Height(maxH-2) sets a min/target; the hard truncate
-	// above is what actually clamps overflow. Without MaxHeight, if
-	// a stray escape sequence inflates the count, lipgloss pads
-	// (visible blank line at top) instead of cutting (lost newest
-	// thinking line). Padding-not-cutting is the safer failure mode.
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.theme.Accent2).
-		Padding(0, 1).
-		Width(width - 2).
-		Height(maxH - 2).
-		Render(inner)
+func renderPanelFrame(width, height int, borderColor lipgloss.Color, lines []string) string {
+	if width < 4 || height < 2 {
+		return ""
+	}
+	innerW := width - 4 // border + one-cell horizontal padding on both sides
+	horizW := width - 2
+	border := lipgloss.NewStyle().Foreground(borderColor)
+	out := make([]string, 0, height)
+	out = append(out, border.Render("╭"+strings.Repeat("─", horizW)+"╮"))
+	contentH := height - 2
+	for i := 0; i < contentH; i++ {
+		line := ""
+		if i < len(lines) {
+			line = truncateCells(lines[i], innerW)
+		}
+		padW := innerW - lipgloss.Width(line)
+		if padW < 0 {
+			padW = 0
+		}
+		out = append(out, border.Render("│")+" "+line+strings.Repeat(" ", padW)+" "+border.Render("│"))
+	}
+	out = append(out, border.Render("╰"+strings.Repeat("─", horizW)+"╯"))
+	return strings.Join(out, "\n")
 }
 
 // renderActivityHeader is the bold/colored top line for one entry —
@@ -652,14 +662,8 @@ func (m *Model) renderPlanTasksPanel(width, maxH int) string {
 		bodyLimit = 1
 	}
 	bodyLines = clipLinesTail(bodyLines, bodyLimit)
-	inner := truncateLineCells(title, width-4) + "\n\n" + strings.Join(bodyLines, "\n")
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.theme.Accent2).
-		Padding(0, 1).
-		Width(width - 2).
-		Height(maxH - 2).
-		Render(inner)
+	innerLines := append([]string{truncateLineCells(title, width-4), ""}, bodyLines...)
+	return renderPanelFrame(width, maxH, m.theme.Accent2, innerLines)
 }
 
 // pruneSubagents — called when a new user turn begins (chat:start).
@@ -786,14 +790,8 @@ func (m *Model) renderSubagentPanel(width, maxH int) string {
 		bodyLimit = 1
 	}
 	bodyLines = clipLinesTail(bodyLines, bodyLimit)
-	inner := truncateLineCells(title, width-4) + "\n\n" + strings.Join(bodyLines, "\n")
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.theme.Accent2).
-		Padding(0, 1).
-		Width(width - 2).
-		Height(maxH - 2).
-		Render(inner)
+	innerLines := append([]string{truncateLineCells(title, width-4), ""}, bodyLines...)
+	return renderPanelFrame(width, maxH, m.theme.Accent2, innerLines)
 }
 
 // renderExpandedPanel — full-screen activity browser (Ctrl+P view) with

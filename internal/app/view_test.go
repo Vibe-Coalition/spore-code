@@ -197,7 +197,36 @@ func TestSidePanelsStayBoundedWithMultilineActivityRows(t *testing.T) {
 	if got := lipgloss.Height(side); got > bodyH {
 		t.Fatalf("side panel exceeded body height: got %d want <= %d\n%s", got, bodyH, side)
 	}
+	assertBottomBorderVisible(t, side)
 	assertViewFits(t, m)
+}
+
+func TestActivityPanelBottomBorderVisibleWhenContentIsTall(t *testing.T) {
+	m := renderTestModel(120, 20)
+	m.appendActivity(codeViewEntry{
+		Tool: "exec",
+		Preview: strings.Join([]string{
+			"output 01",
+			"output 02",
+			"output 03",
+			"output 04",
+			"output 05",
+			"output 06",
+			"output 07",
+			"output 08",
+			"output 09",
+			"output 10",
+		}, "\n"),
+		Text: "tool",
+		When: time.Now(),
+	})
+
+	const bodyH = 9
+	panel := m.renderCodePanel(m.codePanelWidth(), bodyH)
+	if got := lipgloss.Height(panel); got != bodyH {
+		t.Fatalf("activity panel height mismatch: got %d want %d\n%s", got, bodyH, panel)
+	}
+	assertBottomBorderVisible(t, panel)
 }
 
 func renderTestModel(w, h int) *Model {
@@ -236,5 +265,17 @@ func assertViewFits(t *testing.T, m *Model) {
 		if width := ansi.StringWidth(line); width > m.width {
 			t.Fatalf("line %d exceeds terminal width: got %d want <= %d\n%s", i+1, width, m.width, line)
 		}
+	}
+}
+
+func assertBottomBorderVisible(t *testing.T, block string) {
+	t.Helper()
+	lines := strings.Split(block, "\n")
+	if len(lines) == 0 {
+		t.Fatalf("expected rendered block")
+	}
+	last := ansi.Strip(lines[len(lines)-1])
+	if !strings.HasPrefix(last, "╰") || !strings.HasSuffix(last, "╯") {
+		t.Fatalf("bottom frame is not visible: %q\n%s", last, block)
 	}
 }
