@@ -267,7 +267,7 @@ func revokeDeviceToken(cfg *config.Config, token string) error {
 	}
 	base = strings.TrimRight(base, "/")
 	if !setupAuthTransportAllowed(base) {
-		return fmt.Errorf("refusing to send device token over insecure HTTP to %s", base)
+		return fmt.Errorf("refusing to send device token over insecure HTTP to %s (use HTTPS, localhost/private LAN, or SPORE_CODE_ALLOW_INSECURE_AUTH=true)", base)
 	}
 	req, err := http.NewRequest("POST", base+"/api/spore-code/logout", nil)
 	if err != nil {

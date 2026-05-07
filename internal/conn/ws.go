@@ -115,8 +115,8 @@ func authTransportAllowed(base string) bool {
 	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
 		return true
 	}
-	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
-		return true
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
 	}
 	return strings.EqualFold(os.Getenv("SPORE_CODE_ALLOW_INSECURE_AUTH"), "true") || os.Getenv("SPORE_CODE_ALLOW_INSECURE_AUTH") == "1"
 }
@@ -124,7 +124,7 @@ func authTransportAllowed(base string) bool {
 // Authenticate POSTs to /api/spore-code/auth and stashes the token.
 func (c *Client) Authenticate(ctx context.Context) error {
 	if !authTransportAllowed(c.baseURL) {
-		return fmt.Errorf("refusing to send credentials or device token over insecure HTTP to %s (use HTTPS, localhost, or SPORE_CODE_ALLOW_INSECURE_AUTH=true)", c.baseURL)
+		return fmt.Errorf("refusing to send credentials or device token over insecure HTTP to %s (use HTTPS, localhost/private LAN, or SPORE_CODE_ALLOW_INSECURE_AUTH=true)", c.baseURL)
 	}
 	var req *http.Request
 	var err error
@@ -186,7 +186,7 @@ func (c *Client) Logout(ctx context.Context) error {
 		return nil
 	}
 	if !authTransportAllowed(c.baseURL) {
-		return fmt.Errorf("refusing to send device token over insecure HTTP to %s (use HTTPS, localhost, or SPORE_CODE_ALLOW_INSECURE_AUTH=true)", c.baseURL)
+		return fmt.Errorf("refusing to send device token over insecure HTTP to %s (use HTTPS, localhost/private LAN, or SPORE_CODE_ALLOW_INSECURE_AUTH=true)", c.baseURL)
 	}
 	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/api/spore-code/logout", nil)
 	if err != nil {

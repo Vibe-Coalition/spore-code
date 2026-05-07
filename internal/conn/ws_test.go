@@ -77,3 +77,12 @@ func TestAuthenticateUsesDeviceSession(t *testing.T) {
 		t.Fatalf("device auth header mismatch: %q", gotAuth)
 	}
 }
+
+func TestAuthTransportAllowsPrivateLAN(t *testing.T) {
+	if !authTransportAllowed("http://192.168.1.78:18803") {
+		t.Fatal("expected private LAN HTTP to be allowed")
+	}
+	if authTransportAllowed("http://203.0.113.10:18803") {
+		t.Fatal("expected public HTTP to be refused")
+	}
+}

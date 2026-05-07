@@ -95,3 +95,12 @@ func TestTestAuthAutoFallsBackToInviteKey(t *testing.T) {
 		t.Fatalf("unexpected auth fallback payloads: %#v", calls)
 	}
 }
+
+func TestSetupAuthTransportAllowsPrivateLAN(t *testing.T) {
+	if !setupAuthTransportAllowed("http://192.168.1.78:18803") {
+		t.Fatal("expected private LAN HTTP to be allowed")
+	}
+	if setupAuthTransportAllowed("http://203.0.113.10:18803") {
+		t.Fatal("expected public HTTP to be refused")
+	}
+}

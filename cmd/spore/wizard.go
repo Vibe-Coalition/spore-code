@@ -328,8 +328,8 @@ func setupAuthTransportAllowed(base string) bool {
 	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
 		return true
 	}
-	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
-		return true
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
 	}
 	return strings.EqualFold(os.Getenv("SPORE_CODE_ALLOW_INSECURE_AUTH"), "true") || os.Getenv("SPORE_CODE_ALLOW_INSECURE_AUTH") == "1"
 }
@@ -343,7 +343,7 @@ func testAuth(host string, port int, user, authMethod, key, password string) (au
 	}
 	base = strings.TrimRight(base, "/")
 	if !setupAuthTransportAllowed(base) {
-		return authAttempt{}, fmt.Errorf("refusing to send credentials over insecure HTTP to %s (use HTTPS, localhost, or SPORE_CODE_ALLOW_INSECURE_AUTH=true)", base)
+		return authAttempt{}, fmt.Errorf("refusing to send credentials over insecure HTTP to %s (use HTTPS, localhost/private LAN, or SPORE_CODE_ALLOW_INSECURE_AUTH=true)", base)
 	}
 	authBody := map[string]any{"username": user, "issueDevice": true}
 	if authMethod == config.AuthPassword {
