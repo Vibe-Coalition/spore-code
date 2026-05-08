@@ -1,3 +1,5 @@
+//go:build cgo
+
 // Tree-sitter–powered extractors for TypeScript / JavaScript / Python /
 // Rust. Replaces the regex implementations the package shipped through
 // v0.5.0. Go stays on go/ast (stdlib) — extract_go.go is unchanged.
