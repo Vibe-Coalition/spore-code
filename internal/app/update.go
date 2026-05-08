@@ -94,14 +94,24 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.updateKey(msg)
 
-// ── Model routing preset messages ──
+		// ── Model routing preset messages ──
 	case presetsFetchedMsg:
-		m.presetNames = []string(msg.names...)
+		if msg.err != nil {
+			m.pushChat("system", "Preset fetch failed: "+msg.err.Error())
+			break
+		}
+		m.presetNames = append([]string(nil), msg.names...)
+		if len(m.presetNames) == 0 {
+			m.pushChat("system", "No model routing presets found.")
+		} else {
+			m.pushChat("system", "Available presets: "+strings.Join(m.presetNames, ", ")+"\nUsage: /models_preset <name>")
+		}
 	case presetsAppliedMsg:
-		m.presetNames = []string(msg.names...)
-		fmt.Fprintf(os.Stderr, "Preset \"%s\" applied successfully\n", msg.name)
-	case presetsError:
-		fmt.Fprintf(os.Stderr, "Error: %s\n", string(msg.message))
+		if msg.err != nil {
+			m.pushChat("system", "Preset apply failed: "+msg.err.Error())
+			break
+		}
+		m.pushChat("system", fmt.Sprintf("Preset %q applied successfully.", msg.name))
 	case connOpenMsg:
 		first := !m.connected
 		m.connected = true

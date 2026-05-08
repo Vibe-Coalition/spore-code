@@ -152,7 +152,11 @@ func authTransportAllowed(baseURL string) bool {
 // ── helpers on Model ──
 
 func (m *Model) baseURL() string {
-	return fmt.Sprintf("http://%s:%d", m.cfg.Connection.Host, m.cfg.Connection.Port)
+	base := m.cfg.Connection.Host
+	if !strings.Contains(base, "://") {
+		base = fmt.Sprintf("http://%s:%d", base, m.cfg.Connection.Port)
+	}
+	return strings.TrimRight(base, "/")
 }
 
 func (m *Model) authToken() string {
@@ -161,7 +165,7 @@ func (m *Model) authToken() string {
 			return tok
 		}
 	}
-	if m.cfg.Connection.Method() == config.AuthInviteKey {
+	if m.cfg.Connection.Method() == config.AuthInvite {
 		return m.cfg.Connection.Key
 	}
 	return ""
