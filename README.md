@@ -1,3 +1,15 @@
+<p align="center">
+  <strong>Spore Code</strong><br>
+  The terminal companion for Spore Core: local tools, project memory, and an agent in your repo.
+</p>
+
+<p align="center">
+  <a href="https://github.com/Vibe-Coalition"><img alt="Vibe Coalition" src="https://img.shields.io/badge/Vibe%20Coalition-Spore%20Code-ff7a1a?style=for-the-badge"></a>
+  <img alt="Status" src="https://img.shields.io/badge/status-in%20active%20development-2f855a?style=for-the-badge">
+  <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-2563eb?style=for-the-badge">
+  <img alt="Vibe code welcome" src="https://img.shields.io/badge/vibe%20code-welcome-7c3aed?style=for-the-badge">
+</p>
+
 # Spore Code
 
 Spore Code is the terminal coding client for Spore Core. It opens a TUI in the
@@ -8,18 +20,29 @@ user's machine.
 The command is `spore`. The product is Spore Code. The server plugin is
 `spore-code`.
 
+Spore Code is part of the Vibe Coalition Spore stack. It is built for the messy
+middle of real coding sessions: reading a repo, asking for clarification, making
+edits, running local tools where the files actually live, and carrying useful
+project knowledge forward without leaking the rest of your system into the
+prompt. It is a passion project and still moving fast.
+
+PRs are welcome. Bug reports, terminal polish, protocol hardening, docs, release
+automation, and vibe-coded experiments are all useful when they are clear,
+reviewable, and tested. Discord is available for project chat and coordination;
+a public invite link will be added here once it is finalized.
+
 ## Install
 
 Linux:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/yumlevi/spore-code/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Vibe-Coalition/spore-code/main/install.sh | sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/yumlevi/spore-code/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/Vibe-Coalition/spore-code/main/install.ps1 | iex
 ```
 
 Optional installer overrides:
