@@ -10,7 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/yumlevi/spore-code/internal/config"
+	"github.com/Vibe-Coalition/spore-code/internal/config"
 )
 
 func TestBracketedPasteInsertsImmediately(t *testing.T) {
@@ -248,16 +248,16 @@ func TestDeletedImagePlaceholderDoesNotSendHiddenAttachment(t *testing.T) {
 }
 
 func TestQuotedWindowsPathDropKeepsBackslashes(t *testing.T) {
-	got := normalizePastedInput(`"C:\Users\Levi\Pictures\spore shot.png"`, "")
-	want := `C:\Users\Levi\Pictures\spore shot.png`
+	got := normalizePastedInput(`"C:\Users\tester\Pictures\spore shot.png"`, "")
+	want := `C:\Users\tester\Pictures\spore shot.png`
 	if got != want {
 		t.Fatalf("windows path normalization mismatch\nwant: %q\n got: %q", want, got)
 	}
 }
 
 func TestRawWindowsPathDropKeepsBackslashes(t *testing.T) {
-	got := normalizePastedInput(`C:\Users\Levi\Pictures\spore shot.png`, "")
-	want := `C:\Users\Levi\Pictures\spore shot.png`
+	got := normalizePastedInput(`C:\Users\tester\Pictures\spore shot.png`, "")
+	want := `C:\Users\tester\Pictures\spore shot.png`
 	if got != want {
 		t.Fatalf("raw windows path normalization mismatch\nwant: %q\n got: %q", want, got)
 	}

@@ -26,7 +26,7 @@ type updateInstallResult struct {
 }
 
 // installUpdateCmd downloads the latest release binary matching the current
-// GOOS+GOARCH and atomically replaces the running acorn executable.
+// GOOS+GOARCH and atomically replaces the running spore executable.
 //
 // Implementation notes:
 //   - Downloads to a sibling temp file in the install dir so os.Rename works
@@ -45,7 +45,7 @@ func installUpdateCmd(version string) tea.Cmd {
 			}
 			tag, _ = t, u
 		}
-		url := fmt.Sprintf("https://github.com/yumlevi/spore-code/releases/download/%s/%s", tag, currentAssetName())
+		url := fmt.Sprintf("https://github.com/Vibe-Coalition/spore-code/releases/download/%s/%s", tag, currentAssetName())
 
 		// Download.
 		client := &http.Client{Timeout: 2 * time.Minute}
@@ -307,7 +307,7 @@ del "%%~f0" >nul 2>nul
 
 func fetchLatestTag() (string, string, error) {
 	client := &http.Client{Timeout: 8 * time.Second}
-	req, _ := http.NewRequest("GET", "https://api.github.com/repos/yumlevi/spore-code/releases/latest", nil)
+	req, _ := http.NewRequest("GET", "https://api.github.com/repos/Vibe-Coalition/spore-code/releases/latest", nil)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	resp, err := client.Do(req)
 	if err != nil {

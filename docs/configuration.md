@@ -11,7 +11,7 @@ Example:
 [connection]
 host = "spore.example.com"
 port = 443
-user = "yam"
+user = "test-user"
 auth_method = "device"
 key = ""
 password = ""

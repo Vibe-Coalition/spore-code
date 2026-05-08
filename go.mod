@@ -1,4 +1,4 @@
-module github.com/yumlevi/spore-code
+module github.com/Vibe-Coalition/spore-code
 
 go 1.25.0
 

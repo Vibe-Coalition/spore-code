@@ -13,7 +13,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/yumlevi/spore-code/internal/config"
+	"github.com/Vibe-Coalition/spore-code/internal/config"
 )
 
 // presetsFetchedMsg carries the list of preset names from the backend.

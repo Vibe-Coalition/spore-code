@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yumlevi/spore-code/internal/codeindex"
+	"github.com/Vibe-Coalition/spore-code/internal/codeindex"
 )
 
 // ResolvePath enforces the cwd sandbox — tools may only touch paths inside

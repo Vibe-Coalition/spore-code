@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Vibe-Coalition/spore-code/internal/proto"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/yumlevi/spore-code/internal/proto"
 )
 
 // Standard prose form — single-select, multi-select, open-ended on

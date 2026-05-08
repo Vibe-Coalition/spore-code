@@ -10,9 +10,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/yumlevi/spore-code/internal/codeindex"
-	"github.com/yumlevi/spore-code/internal/conn"
-	"github.com/yumlevi/spore-code/internal/tools"
+	"github.com/Vibe-Coalition/spore-code/internal/codeindex"
+	"github.com/Vibe-Coalition/spore-code/internal/conn"
+	"github.com/Vibe-Coalition/spore-code/internal/tools"
 )
 
 // slashHandler is the signature every slash command implements. The

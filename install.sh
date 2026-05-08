@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # Spore Code — one-liner installer for Linux.
 #
-#   curl -fsSL https://raw.githubusercontent.com/yumlevi/spore-code/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/Vibe-Coalition/spore-code/main/install.sh | sh
 #
 # Optional overrides (pass before the pipe):
 #   SPORE_CODE_VERSION=v1.0.0    pin a specific release tag
@@ -12,7 +12,7 @@
 
 set -eu
 
-REPO="yumlevi/spore-code"
+REPO="Vibe-Coalition/spore-code"
 VERSION="${SPORE_CODE_VERSION:-latest}"
 BIN="spore"
 
@@ -39,7 +39,7 @@ case "$os" in
   darwin)  die "macOS release assets are currently paused; build from source with INCLUDE_DARWIN=1 on a host with Apple SDK." ;;
   msys*|mingw*|cygwin*)
     die "Detected Git-Bash / WSL — use the PowerShell installer instead:
-     irm https://raw.githubusercontent.com/yumlevi/spore-code/main/install.ps1 | iex" ;;
+     irm https://raw.githubusercontent.com/Vibe-Coalition/spore-code/main/install.ps1 | iex" ;;
   *) die "Unsupported OS: $os" ;;
 esac
 

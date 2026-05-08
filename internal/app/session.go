@@ -32,7 +32,7 @@ func gitBranch(cwd string) string {
 //
 //	cli:<user>@<project-name>-<pathhash>
 //
-// Stable means every acorn invocation in the same project lands on the
+// Stable means every spore invocation in the same project lands on the
 // same server-side session, picking up prior turns automatically. The
 // /new slash command is the explicit "start fresh" escape hatch.
 //
@@ -63,7 +63,7 @@ func ComputeSessionID(user, cwd string) string {
 //
 // Used for the no-flag launch path (when AutoResume is off) and for the
 // /new slash command. Old sessions are still discoverable via /sessions
-// or `acorn -c`'s picker.
+// or `spore -c`'s picker.
 func ComputeSessionIDFresh(user, cwd string) string {
 	return ComputeSessionID(user, cwd) + "-" + time.Now().UTC().Format("20060102T150405")
 }

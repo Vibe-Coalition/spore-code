@@ -12,9 +12,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 
-	"github.com/yumlevi/spore-code/internal/conn"
-	"github.com/yumlevi/spore-code/internal/proto"
-	"github.com/yumlevi/spore-code/internal/tools"
+	"github.com/Vibe-Coalition/spore-code/internal/conn"
+	"github.com/Vibe-Coalition/spore-code/internal/proto"
+	"github.com/Vibe-Coalition/spore-code/internal/tools"
 )
 
 // PlanPrefix — port of acorn/constants.py:PLAN_PREFIX. Prepended to the

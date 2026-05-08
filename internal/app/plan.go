@@ -9,7 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/yumlevi/spore-code/internal/proto"
+	"github.com/Vibe-Coalition/spore-code/internal/proto"
 )
 
 type planModal struct {

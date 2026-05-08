@@ -1,4 +1,4 @@
-// Command acorn — acorn-cli, a Go TUI that talks to a SPORE instance
+// Command spore — Spore Code, a Go TUI that talks to a Spore Core instance
 // over WebSocket and runs local file/exec/index tools on the user's
 // machine. See README.md for setup.
 package main
@@ -15,14 +15,14 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/yumlevi/spore-code/internal/app"
-	"github.com/yumlevi/spore-code/internal/config"
-	"github.com/yumlevi/spore-code/internal/sessionlog"
+	"github.com/Vibe-Coalition/spore-code/internal/app"
+	"github.com/Vibe-Coalition/spore-code/internal/config"
+	"github.com/Vibe-Coalition/spore-code/internal/sessionlog"
 )
 
 // version is overrideable at link time:
 //
-//	go build -ldflags "-X main.version=v0.1.1" ./cmd/acorn
+//	go build -ldflags "-X main.version=v0.1.1" ./cmd/spore
 //
 // Falls back to the in-source default for plain `go build`.
 var version = "v1.0.33"
@@ -165,7 +165,7 @@ func main() {
 	}
 	if sess == "" {
 		// Default: each launch gets a fresh, timestamped session so that
-		// `acorn` doesn't silently drop you into your last conversation.
+		// `spore` doesn't silently drop you into your last conversation.
 		// Set [session] auto_resume = true in config.toml to opt back into
 		// the deterministic-id behavior; -c / --session=<id> are the
 		// explicit "continue" gestures regardless.

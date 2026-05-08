@@ -21,11 +21,11 @@ func TestAuthenticateUsesInviteKeyPayload(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, 0, "yam", "invite", "invite-key", "", "")
+	c := New(srv.URL, 0, "test-user", "invite", "invite-key", "", "")
 	if err := c.Authenticate(context.Background()); err != nil {
 		t.Fatalf("authenticate: %v", err)
 	}
-	if got["username"] != "yam" || got["key"] != "invite-key" {
+	if got["username"] != "test-user" || got["key"] != "invite-key" {
 		t.Fatalf("invite auth payload mismatch: %#v", got)
 	}
 	if _, ok := got["password"]; ok {
@@ -43,11 +43,11 @@ func TestAuthenticateUsesPasswordPayload(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, 0, "yam", "password", "", "secret", "")
+	c := New(srv.URL, 0, "test-user", "password", "", "secret", "")
 	if err := c.Authenticate(context.Background()); err != nil {
 		t.Fatalf("authenticate: %v", err)
 	}
-	if got["username"] != "yam" || got["password"] != "secret" {
+	if got["username"] != "test-user" || got["password"] != "secret" {
 		t.Fatalf("password auth payload mismatch: %#v", got)
 	}
 	if _, ok := got["key"]; ok {
@@ -69,7 +69,7 @@ func TestAuthenticateUsesDeviceSession(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, 0, "yam", "device", "", "", "device-token")
+	c := New(srv.URL, 0, "test-user", "device", "", "", "device-token")
 	if err := c.Authenticate(context.Background()); err != nil {
 		t.Fatalf("authenticate: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestAuthenticateUsesDeviceSession(t *testing.T) {
 }
 
 func TestAuthTransportAllowsPrivateLAN(t *testing.T) {
-	if !authTransportAllowed("http://192.168.1.78:18803") {
+	if !authTransportAllowed("http://192.168.1.10:18803") {
 		t.Fatal("expected private LAN HTTP to be allowed")
 	}
 	if authTransportAllowed("http://203.0.113.10:18803") {

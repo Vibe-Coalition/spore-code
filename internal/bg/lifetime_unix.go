@@ -7,7 +7,7 @@ import (
 	"syscall"
 )
 
-// applyChildLifetime makes the child die when acorn dies, even on
+// applyChildLifetime makes the child die when spore dies, even on
 // SIGKILL. Mirrors acorn/background.py:_unix_preexec which uses
 // PR_SET_PDEATHSIG via libc.prctl. Linux-only kernel feature.
 func applyChildLifetime(cmd *exec.Cmd) {

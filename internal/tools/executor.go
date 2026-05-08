@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yumlevi/spore-code/internal/bg"
+	"github.com/Vibe-Coalition/spore-code/internal/bg"
 )
 
 // Server-side tools: we must NOT claim these. Execute returns (nil, false);

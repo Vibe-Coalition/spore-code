@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/yumlevi/spore-code/internal/codeindex"
+	"github.com/Vibe-Coalition/spore-code/internal/codeindex"
 )
 
 // verify_implementation — goal-backward check of "is this symbol
@@ -15,12 +15,12 @@ import (
 // list of files. Runs four explicit levels (the GSD pattern,
 // adapted for acorn's tree-sitter index):
 //
-//   1. **exists** — the symbol is in the index
-//   2. **substantive** — body isn't a stub (TODO, pass, "not
-//      implemented", single throw/raise/panic, etc.)
-//   3. **wired** — at least one CALLS edge points at it
-//   4. **export_level** — at least one caller is in a different
-//      file (i.e. it's actually used outside its declaration site)
+//  1. **exists** — the symbol is in the index
+//  2. **substantive** — body isn't a stub (TODO, pass, "not
+//     implemented", single throw/raise/panic, etc.)
+//  3. **wired** — at least one CALLS edge points at it
+//  4. **export_level** — at least one caller is in a different
+//     file (i.e. it's actually used outside its declaration site)
 //
 // Designed for use after a plan step claims to have created /
 // modified a symbol. Returns a structured per-symbol report so the
@@ -28,8 +28,9 @@ import (
 // turns out to mean "stub".
 //
 // Inputs (one of these forms):
-//   qnames: []string  — explicit list of qualified names
-//   paths:  []string  — verify every symbol declared in these files
+//
+//	qnames: []string  — explicit list of qualified names
+//	paths:  []string  — verify every symbol declared in these files
 //
 // Both can be combined; results merge.
 func VerifyImplementation(input map[string]any, cwd string) any {
@@ -106,12 +107,12 @@ func VerifyImplementation(input map[string]any, cwd string) any {
 	}
 
 	resp := map[string]any{
-		"ok":           true,
-		"count":        len(out),
-		"passed":       overallPassed,
-		"failed":       overallFailed,
-		"results":      out,
-		"hint":         "exists=symbol in index; substantive=body isn't a stub; wired=≥1 caller; export_level=caller in a different file. A failed level usually means the implementation is incomplete or the symbol isn't actually used.",
+		"ok":      true,
+		"count":   len(out),
+		"passed":  overallPassed,
+		"failed":  overallFailed,
+		"results": out,
+		"hint":    "exists=symbol in index; substantive=body isn't a stub; wired=≥1 caller; export_level=caller in a different file. A failed level usually means the implementation is incomplete or the symbol isn't actually used.",
 	}
 	if note := freshnessNote(refreshed, oldHead, newHead); note != nil {
 		resp["index_refreshed"] = note

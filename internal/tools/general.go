@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yumlevi/spore-code/internal/bg"
+	"github.com/Vibe-Coalition/spore-code/internal/bg"
 )
 
 func resolveDir(input map[string]any, cwd, scope string) (string, error) {

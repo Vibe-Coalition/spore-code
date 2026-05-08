@@ -18,7 +18,7 @@ import (
 const MaxFileBytes = 2 * 1024 * 1024 // 2 MiB
 
 // noiseDirs are skipped during the walk. Mirrors the list the agent
-// prompt advertises in plugins/acorn-cli/index.js buildProjectContextSection
+// prompt advertises in plugins/spore-code/index.js buildProjectContextSection
 // (line ~389) so the index reflects the same project view the user sees.
 var noiseDirs = map[string]struct{}{
 	".git":             {},
@@ -33,7 +33,7 @@ var noiseDirs = map[string]struct{}{
 	"out":              {}, // common JS/Java output dir
 	".next":            {},
 	".cache":           {},
-	".spore-code":           {},
+	".spore-code":      {},
 	"vendor":           {},
 	".gradle":          {},
 	".mvn":             {},
@@ -74,17 +74,17 @@ const (
 // extToLanguage maps file extension (lowercase, with dot) to language
 // constant. Unknown extensions yield "" and the walker skips the file.
 var extToLanguage = map[string]string{
-	".go":   LangGo,
-	".ts":   LangTS,
-	".tsx":  LangTS,
-	".mts":  LangTS,
-	".cts":  LangTS,
-	".js":   LangJS,
-	".jsx":  LangJS,
-	".mjs":  LangJS,
-	".cjs":  LangJS,
-	".py":   LangPython,
-	".rs":   LangRust,
+	".go":  LangGo,
+	".ts":  LangTS,
+	".tsx": LangTS,
+	".mts": LangTS,
+	".cts": LangTS,
+	".js":  LangJS,
+	".jsx": LangJS,
+	".mjs": LangJS,
+	".cjs": LangJS,
+	".py":  LangPython,
+	".rs":  LangRust,
 }
 
 // FileEntry is one source file found by the walker.

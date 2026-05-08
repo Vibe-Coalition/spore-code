@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/yumlevi/spore-code/internal/codeindex"
+	"github.com/Vibe-Coalition/spore-code/internal/codeindex"
 )
 
 // codeindex tool surface (M1):

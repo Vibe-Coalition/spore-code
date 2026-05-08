@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/yumlevi/spore-code/internal/config"
+	"github.com/Vibe-Coalition/spore-code/internal/config"
 )
 
 func TestFetchPresetsFallsBackToCoreRoute(t *testing.T) {

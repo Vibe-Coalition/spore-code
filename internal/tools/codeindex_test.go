@@ -215,7 +215,7 @@ func TestIndexNonForceDoesNotDeadlock(t *testing.T) {
 }
 
 // TestExecutorTraceCallsAndImpact exercises the M2 tools through
-// Executor.Execute. Indexes acorn-cli itself, then asks "who calls
+// Executor.Execute. Indexes Spore Code itself, then asks "who calls
 // Open?" and "what does a change to internal/codeindex/store.go
 // affect?" — both should return non-empty results.
 func TestExecutorTraceCallsAndImpact(t *testing.T) {

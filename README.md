@@ -82,7 +82,7 @@ spore                         # start a fresh session in this directory
 spore -c                      # resume a previous project session
 spore --session cli:...       # resume a specific session id
 spore --plan                  # start in plan mode
-spore --host spore.tld --port 443 --user yam
+spore --host spore.tld --port 443 --user test-user
 spore --version
 spore logout                  # revoke/clear saved credentials
 ```

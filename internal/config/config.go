@@ -69,15 +69,15 @@ type DisplaySection struct {
 
 // SessionSection controls launch-time session behavior.
 //
-// AutoResume = true  → no-arg `acorn` resumes the deterministic
+// AutoResume = true  → no-arg `spore` resumes the deterministic
 //
 //	(user, cwd)-keyed session, same as before. Useful
 //	for users who want to pick up where they left off
 //	on every launch.
 //
-// AutoResume = false → no-arg `acorn` opens a fresh, timestamped session.
+// AutoResume = false → no-arg `spore` opens a fresh, timestamped session.
 //
-//	Use `acorn -c` to explicitly resume.
+//	Use `spore -c` to explicitly resume.
 type SessionSection struct {
 	AutoResume bool `toml:"auto_resume"`
 }
@@ -224,7 +224,7 @@ func EnsureLocalDir(cwd string) error {
 	return os.MkdirAll(p, 0o755)
 }
 
-// LastSession records the most recent session id + its cwd so `acorn -c`
+// LastSession records the most recent session id + its cwd so `spore -c`
 // can resume it.
 type LastSession struct {
 	SessionID string `toml:"session_id"`

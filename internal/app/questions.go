@@ -9,7 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 
-	"github.com/yumlevi/spore-code/internal/proto"
+	"github.com/Vibe-Coalition/spore-code/internal/proto"
 )
 
 // question represents a single question in a QUESTIONS: block or an

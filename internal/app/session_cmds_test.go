@@ -5,14 +5,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yumlevi/spore-code/internal/config"
-	"github.com/yumlevi/spore-code/internal/sessionlog"
+	"github.com/Vibe-Coalition/spore-code/internal/config"
+	"github.com/Vibe-Coalition/spore-code/internal/sessionlog"
 )
 
 func TestSwitchSessionReopensWriter(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := &config.Config{
-		Connection: config.ConnectionSection{User: "yam"},
+		Connection: config.ConnectionSection{User: "test-user"},
 		GlobalDir:  filepath.Join(tmp, "global"),
 	}
 	m := &Model{cfg: cfg, cwd: tmp, currentStreamIdx: -1}

@@ -1,6 +1,6 @@
 # Spore Code — one-liner installer for Windows.
 #
-#   irm https://raw.githubusercontent.com/yumlevi/spore-code/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/Vibe-Coalition/spore-code/main/install.ps1 | iex
 #
 # Optional overrides (set before the pipe):
 #   $env:SPORE_CODE_VERSION = 'v1.0.0'  # pin a specific release tag
@@ -11,7 +11,7 @@
 $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$Repo    = 'yumlevi/spore-code'
+$Repo    = 'Vibe-Coalition/spore-code'
 $Version = if ($env:SPORE_CODE_VERSION) { $env:SPORE_CODE_VERSION } else { 'latest' }
 $BinName = 'spore.exe'
 

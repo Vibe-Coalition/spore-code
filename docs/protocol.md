@@ -12,7 +12,7 @@ POST /api/spore-code/auth
 Content-Type: application/json
 
 {
-  "username": "yam",
+  "username": "test-user",
   "key": "invite-key"
 }
 ```
@@ -21,7 +21,7 @@ or:
 
 ```json
 {
-  "username": "yam",
+  "username": "test-user",
   "authMethod": "password",
   "password": "..."
 }
@@ -106,7 +106,7 @@ On connect, the client sends:
 {
   "type": "session:start",
   "sessionId": "cli:user@project-...",
-  "userName": "yam",
+  "userName": "test-user",
   "cwd": "/path/to/project",
   "startedAt": "2026-05-08T00:00:00Z",
   "clientVersion": "v1.0.33",

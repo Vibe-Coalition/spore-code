@@ -12,8 +12,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/yumlevi/spore-code/internal/config"
-	"github.com/yumlevi/spore-code/internal/proto"
+	"github.com/Vibe-Coalition/spore-code/internal/config"
+	"github.com/Vibe-Coalition/spore-code/internal/proto"
 )
 
 func TestRerenderViewportDoesNotTopPadShortTranscript(t *testing.T) {
@@ -357,7 +357,7 @@ func TestExpandedPanelUsesActiveThemeSurface(t *testing.T) {
 	m.appendActivity(codeViewEntry{
 		Tool:    "exec",
 		ExecCmd: "go test ./...",
-		ExecOut: []string{"ok github.com/yumlevi/spore-code/internal/app"},
+		ExecOut: []string{"ok github.com/Vibe-Coalition/spore-code/internal/app"},
 		Text:    "done",
 		When:    time.Now(),
 	})

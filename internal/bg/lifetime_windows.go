@@ -83,7 +83,7 @@ func ApplyChildLifetime(cmd *exec.Cmd) { applyChildLifetime(cmd) }
 func AttachAndResume(cmd *exec.Cmd) error { return attachAndResume(cmd) }
 
 // attachAndResume on Windows assigns the started child to the shared
-// Job Object so it gets killed when acorn dies. Brief race: the child
+// Job Object so it gets killed when spore dies. Brief race: the child
 // may execute a few instructions before being attached. Acceptable
 // trade-off vs the suspend-then-resume dance.
 func attachAndResume(cmd *exec.Cmd) error {

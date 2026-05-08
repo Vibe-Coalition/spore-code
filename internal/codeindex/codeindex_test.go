@@ -8,7 +8,7 @@ import (
 )
 
 // TestEndToEndIndexAcornCli runs the full pipeline (Open -> Walk ->
-// ExtractFile -> UpsertSymbol -> Search) against the parent acorn-cli
+// ExtractFile -> UpsertSymbol -> Search) against the parent Spore Code
 // repository itself. It validates that the Go extractor finds known
 // symbols (Executor.Execute, Open, Symbol) and that Search returns them.
 func TestEndToEndIndexAcornCli(t *testing.T) {

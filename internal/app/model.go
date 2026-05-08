@@ -13,11 +13,11 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/yumlevi/spore-code/internal/config"
-	"github.com/yumlevi/spore-code/internal/conn"
-	"github.com/yumlevi/spore-code/internal/proto"
-	"github.com/yumlevi/spore-code/internal/sessionlog"
-	"github.com/yumlevi/spore-code/internal/tools"
+	"github.com/Vibe-Coalition/spore-code/internal/config"
+	"github.com/Vibe-Coalition/spore-code/internal/conn"
+	"github.com/Vibe-Coalition/spore-code/internal/proto"
+	"github.com/Vibe-Coalition/spore-code/internal/sessionlog"
+	"github.com/Vibe-Coalition/spore-code/internal/tools"
 )
 
 type modalKind int
@@ -251,7 +251,7 @@ func cleanAgentName(name string) string {
 
 // New constructs the initial model.
 //
-// isContinue is set by `acorn -c` / `/resume`. When true, New loads the
+// isContinue is set by `spore -c` / `/resume`. When true, New loads the
 // local JSONL session history and seeds m.messages before the first
 // render, so the user sees prior turns instantly even if the server
 // doesn't know the session (fresh SPORE, different machine, etc.).

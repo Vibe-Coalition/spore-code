@@ -137,7 +137,7 @@ type ProjectContext struct {
 
 	// HasCodeIndex is true when <cwd>/.spore-code/index.db exists and has
 	// rows. Drives the plan-mode Phase 2 prompt branch in the
-	// acorn-cli plugin: when true, agent prefers structural queries
+	// spore-code plugin: when true, agent prefers structural queries
 	// (search_symbols, trace_calls, get_snippet, architecture, impact)
 	// over read_file/grep. When false the original Phase 2 prompt
 	// stands.

@@ -21,8 +21,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
 
-	"github.com/yumlevi/spore-code/internal/app"
-	"github.com/yumlevi/spore-code/internal/config"
+	"github.com/Vibe-Coalition/spore-code/internal/app"
+	"github.com/Vibe-Coalition/spore-code/internal/config"
 )
 
 // runSetupWizard is the Go port of acorn/config.py:run_setup_wizard.
@@ -65,7 +65,7 @@ func runSetupWizard() (*config.Config, error) {
 	// 1. Host + port
 	fmt.Println("1. Connect to Spore Core")
 	fmt.Println("   Enter your Spore Core server address.")
-	fmt.Println("   Examples: 192.168.1.78 · https://spore.example.com")
+	fmt.Println("   Examples: 192.168.1.10 · https://spore.example.com")
 	host, port := promptEndpoint(rd, "localhost", 18810)
 	fmt.Println()
 

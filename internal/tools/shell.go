@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yumlevi/spore-code/internal/bg"
+	"github.com/Vibe-Coalition/spore-code/internal/bg"
 )
 
 // dangerousPatterns — exact substrings we refuse to run. Mirror

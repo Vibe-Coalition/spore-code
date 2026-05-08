@@ -9,8 +9,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/yumlevi/spore-code/internal/config"
-	"github.com/yumlevi/spore-code/internal/sessionlog"
+	"github.com/Vibe-Coalition/spore-code/internal/config"
+	"github.com/Vibe-Coalition/spore-code/internal/sessionlog"
 )
 
 // legacy_cmds.go — handlers for slash commands that used to live in the

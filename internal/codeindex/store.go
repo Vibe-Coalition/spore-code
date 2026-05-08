@@ -3,7 +3,7 @@
 // and is the authoritative source for search_symbols / trace_calls /
 // get_snippet / architecture / impact tools the agent calls over WS.
 //
-// The store is pure-Go (modernc.org/sqlite) so the acorn binary stays
+// The store is pure-Go (modernc.org/sqlite) so the spore binary stays
 // statically cross-compiled with CGO_ENABLED=0.
 package codeindex
 
@@ -26,11 +26,12 @@ import (
 // the index is always derivable from source.
 //
 // History:
-//   v1 — initial schema, regex extractors for TS/JS/Python.
-//   v2 — v0.6.0: tree-sitter for TS/JS/Python, new Rust extractor.
-//        Bumped so existing v1 indexes (regex-era symbols) get
-//        rebuilt on the next index pass without forcing the user
-//        to remember `/index force`.
+//
+//	v1 — initial schema, regex extractors for TS/JS/Python.
+//	v2 — v0.6.0: tree-sitter for TS/JS/Python, new Rust extractor.
+//	     Bumped so existing v1 indexes (regex-era symbols) get
+//	     rebuilt on the next index pass without forcing the user
+//	     to remember `/index force`.
 const SchemaVersion = 2
 
 // Symbol is one identifier extracted from source.
@@ -69,11 +70,11 @@ type SearchQuery struct {
 // Stats summarizes the current index for /architecture and the
 // project_memory_summary bootstrap line.
 type Stats struct {
-	IndexHead    string
-	Files        int
-	Symbols      int
-	ByLanguage   map[string]int
-	UpdatedAt    time.Time
+	IndexHead  string
+	Files      int
+	Symbols    int
+	ByLanguage map[string]int
+	UpdatedAt  time.Time
 }
 
 // Store wraps the sqlite handle. One Store per project root.

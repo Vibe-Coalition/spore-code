@@ -8,7 +8,7 @@ import (
 )
 
 // TestArchitectureAcornCli runs the architecture summary against the
-// indexed acorn-cli repo. Validates: clusters around the obvious
+// indexed Spore Code repo. Validates: clusters around the obvious
 // top-level dirs (cmd, internal), Go-dominant tech stack, main entry
 // point present, calls=0 in M1.
 func TestArchitectureAcornCli(t *testing.T) {

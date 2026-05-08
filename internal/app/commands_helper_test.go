@@ -17,7 +17,7 @@ func TestScriptNamesInCommand(t *testing.T) {
 		{"./gen_qr.py", []string{"qr"}},
 		{"bash .spore-code/scratch/lan_helper.sh", []string{"lan-helper"}}, // _helper suffix kept; only gen_/print_/dump_ prefixes are stripped
 		// Windows-style paths get normalized via ReplaceAll.
-		{`C:\Users\esfle\proj\.acorn\scratch\gen_qr.py`, []string{"qr"}},
+		{`C:\Users\tester\proj\.acorn\scratch\gen_qr.py`, []string{"qr"}},
 		{`uv run --with qrcode python .acorn\scratch\gen_qr.py`, []string{"qr"}},
 		// Multiple helpers in one command line.
 		{`python3 .spore-code/scratch/gen_qr.py && bash dump_logs.sh`, []string{"qr", "logs"}}, // gen_ + dump_ prefixes stripped
@@ -27,7 +27,7 @@ func TestScriptNamesInCommand(t *testing.T) {
 		{"npx expo start --lan", nil},
 		{"netstat -ano | findstr :8081", nil},
 		{"curl http://localhost:8081/status", nil},
-		{`type C:\Users\esfle\proj\.acorn\logs\bg-3.log`, nil}, // .spore-code/logs ≠ .spore-code/scratch
+		{`type C:\Users\tester\proj\.acorn\logs\bg-3.log`, nil}, // .spore-code/logs ≠ .spore-code/scratch
 		// Edge: empty / whitespace.
 		{"", nil},
 		{"   ", nil},

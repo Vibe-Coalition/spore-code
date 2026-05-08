@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// TestVerifyImplementation runs the 4-level check against acorn-cli's
+// TestVerifyImplementation runs the 4-level check against Spore Code's
 // own indexed source. Uses the same allowAllPerms test executor as
 // the other codeindex flows so the dispatch path through Execute is
 // covered too.

@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/yumlevi/spore-code/internal/config"
+	"github.com/Vibe-Coalition/spore-code/internal/config"
 )
 
 func TestCleanPromptLineStripsBracketedPaste(t *testing.T) {
@@ -29,10 +29,10 @@ func TestTestAuthUsesPasswordPayload(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if _, err := testAuth(srv.URL, 0, "yam", config.AuthPassword, "", "secret"); err != nil {
+	if _, err := testAuth(srv.URL, 0, "test-user", config.AuthPassword, "", "secret"); err != nil {
 		t.Fatalf("test auth: %v", err)
 	}
-	if got["username"] != "yam" || got["password"] != "secret" || got["authMethod"] != config.AuthPassword || got["issueDevice"] != true {
+	if got["username"] != "test-user" || got["password"] != "secret" || got["authMethod"] != config.AuthPassword || got["issueDevice"] != true {
 		t.Fatalf("password auth payload mismatch: %#v", got)
 	}
 	if _, ok := got["key"]; ok {
@@ -55,7 +55,7 @@ func TestTestAuthAutoDetectsPassword(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	attempt, err := testAuthAuto(srv.URL, 0, "yam", "secret")
+	attempt, err := testAuthAuto(srv.URL, 0, "test-user", "secret")
 	if err != nil {
 		t.Fatalf("auto auth: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestTestAuthAutoFallsBackToInviteKey(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	attempt, err := testAuthAuto(srv.URL, 0, "yam", "invite-key")
+	attempt, err := testAuthAuto(srv.URL, 0, "test-user", "invite-key")
 	if err != nil {
 		t.Fatalf("auto auth: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestTestAuthAutoFallsBackToInviteKey(t *testing.T) {
 }
 
 func TestSetupAuthTransportAllowsPrivateLAN(t *testing.T) {
-	if !setupAuthTransportAllowed("http://192.168.1.78:18803") {
+	if !setupAuthTransportAllowed("http://192.168.1.10:18803") {
 		t.Fatal("expected private LAN HTTP to be allowed")
 	}
 	if setupAuthTransportAllowed("http://203.0.113.10:18803") {

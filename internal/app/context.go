@@ -12,9 +12,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/yumlevi/spore-code/internal/codeindex"
-	"github.com/yumlevi/spore-code/internal/proto"
-	localtools "github.com/yumlevi/spore-code/internal/tools"
+	"github.com/Vibe-Coalition/spore-code/internal/codeindex"
+	"github.com/Vibe-Coalition/spore-code/internal/proto"
+	localtools "github.com/Vibe-Coalition/spore-code/internal/tools"
 )
 
 // BuildProjectContext returns the structured project metadata that gets
