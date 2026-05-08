@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -41,21 +42,15 @@ func fetchPresetsWithMode(m *Model, silent bool) tea.Msg {
 		return presetsFetchedMsg{err: fmt.Errorf("no auth token available for preset fetch"), silent: silent}
 	}
 
-	req, err := http.NewRequest("GET", base+"/api/spore-code/routing-presets", nil)
+	resp, err := doPresetRequest("GET", base, token, []presetRequestSpec{
+		{path: "/api/spore-code/routing-presets"},
+		{path: "/api/plugins/spore-code/routing-presets"},
+		{path: "/api/models/routing-presets"},
+	})
 	if err != nil {
-		return presetsFetchedMsg{err: err, silent: silent}
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return presetsFetchedMsg{err: err, silent: silent}
+		return presetsFetchedMsg{err: fmt.Errorf("fetch presets: %w", err), silent: silent}
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return presetsFetchedMsg{err: fmt.Errorf("fetch presets: HTTP %d", resp.StatusCode), silent: silent}
-	}
 
 	var result struct {
 		OK      bool `json:"ok"`
@@ -95,6 +90,10 @@ func applyPresetCmd(m *Model, name string) tea.Cmd {
 }
 
 func doApplyPreset(m *Model, name string) (bool, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false, fmt.Errorf("preset name is required")
+	}
 	base := m.baseURL()
 	if !authTransportAllowed(base) {
 		return false, fmt.Errorf("refusing to apply preset over insecure HTTP to %s", base)
@@ -106,40 +105,89 @@ func doApplyPreset(m *Model, name string) (bool, error) {
 	}
 
 	if isServerPresetResetName(name) {
-		req, err := http.NewRequest("DELETE", base+"/api/spore-code/routing-presets/current", nil)
-		if err != nil {
-			return false, err
-		}
-		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := doPresetRequest("DELETE", base, token, []presetRequestSpec{
+			{path: "/api/spore-code/routing-presets/current"},
+			{path: "/api/plugins/spore-code/routing-presets/current"},
+		})
 		if err != nil {
 			return false, err
 		}
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return false, fmt.Errorf("clear preset override: HTTP %d", resp.StatusCode)
-		}
 		return true, nil
 	}
 
 	payload, _ := json.Marshal(map[string]string{"name": name})
-	req, err := http.NewRequest("POST", base+"/api/spore-code/routing-presets/apply", bytes.NewReader(payload))
-	if err != nil {
-		return false, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
+	encodedName := url.PathEscape(name)
+	resp, err := doPresetRequest("POST", base, token, []presetRequestSpec{
+		{path: "/api/spore-code/routing-presets/apply", body: payload},
+		{path: "/api/plugins/spore-code/routing-presets/apply", body: payload},
+		{path: "/api/models/routing-presets/" + encodedName + "/apply"},
+	})
 	if err != nil {
 		return false, err
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return false, fmt.Errorf("apply preset %q: HTTP %d", name, resp.StatusCode)
-	}
 	return false, nil
+}
+
+type presetRequestSpec struct {
+	path string
+	body []byte
+}
+
+func doPresetRequest(method, base, token string, specs []presetRequestSpec) (*http.Response, error) {
+	var lastErr error
+	for _, spec := range specs {
+		var body io.Reader
+		if spec.body != nil {
+			body = bytes.NewReader(spec.body)
+		}
+		req, err := http.NewRequest(method, base+spec.path, body)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		if spec.body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode == http.StatusOK {
+			return resp, nil
+		}
+		lastErr = presetHTTPError(resp)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusNotFound {
+			return nil, lastErr
+		}
+	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, fmt.Errorf("no preset routes configured")
+}
+
+func presetHTTPError(resp *http.Response) error {
+	if resp == nil {
+		return fmt.Errorf("HTTP request failed")
+	}
+	msg := fmt.Sprintf("HTTP %d", resp.StatusCode)
+	if resp.Body != nil {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		var parsed struct {
+			Error string `json:"error"`
+			Name  string `json:"name"`
+		}
+		if len(body) > 0 && json.Unmarshal(body, &parsed) == nil && parsed.Error != "" {
+			msg = fmt.Sprintf("HTTP %d: %s", resp.StatusCode, parsed.Error)
+			if parsed.Name != "" {
+				msg += " (" + parsed.Name + ")"
+			}
+		}
+	}
+	return fmt.Errorf("%s", msg)
 }
 
 func isServerPresetResetName(name string) bool {
@@ -163,7 +211,10 @@ func handleModelsPreset(m *Model, args []string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	name := args[0]
+	name := strings.TrimSpace(strings.Join(args, " "))
+	if name == "" {
+		return handleModelsPreset(m, nil)
+	}
 	if isServerPresetResetName(name) {
 		m.pushChat("system", "Clearing device preset override; this CLI will use server routing again.")
 		return m, applyPresetCmd(m, name)
