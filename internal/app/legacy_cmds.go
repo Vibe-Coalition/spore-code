@@ -229,7 +229,7 @@ func cmdTheme(m *Model, args []string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.applyTheme(themeForName(args[0]))
-	m.cfg.Display.Theme = m.theme.Name
+	m.cfg.Display.Theme = savedThemeName(m.theme)
 	if err := config.Save(m.cfg); err != nil {
 		m.pushChat("system", "Theme → "+m.theme.Name+"  (save failed: "+err.Error()+")")
 	} else {

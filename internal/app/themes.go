@@ -1,6 +1,7 @@
 package app
 
 import (
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textarea"
@@ -64,6 +65,11 @@ type Theme struct {
 	BannerSub lipgloss.Color
 	CodeTheme string
 	Separator lipgloss.Color
+
+	// Runtime compatibility mode. When true, the palette intentionally uses
+	// ANSI 16 colors instead of RGB hex so weak/web terminals do not invent
+	// inconsistent nearest-color mappings for every theme token.
+	Compat bool
 
 	// ── Compatibility shims for existing renderer call sites ────────
 	// These alias the canonical fields above. They exist so I don't have
@@ -332,6 +338,18 @@ var themeSnes = Theme{
 // themeForName returns the named theme, falling back to dark. Older saved
 // theme names that are no longer exposed intentionally normalize to dark.
 func themeForName(name string) Theme {
+	return themeForNameWithEnv(name, os.Getenv)
+}
+
+func themeForNameWithEnv(name string, getenv func(string) string) Theme {
+	base := baseThemeForName(name)
+	if shouldUseCompatTheme(getenv) {
+		return compatTheme(base)
+	}
+	return base
+}
+
+func baseThemeForName(name string) Theme {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "dark", "":
 		return themeDark
@@ -343,13 +361,86 @@ func themeForName(name string) Theme {
 	return themeDark
 }
 
+func shouldUseCompatTheme(getenv func(string) string) bool {
+	forced := strings.ToLower(strings.TrimSpace(getenv("SPORE_THEME_COMPAT")))
+	switch forced {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	}
+
+	term := strings.ToLower(strings.TrimSpace(getenv("TERM")))
+	colorTerm := strings.ToLower(strings.TrimSpace(getenv("COLORTERM")))
+
+	if strings.Contains(colorTerm, "truecolor") || strings.Contains(colorTerm, "24bit") {
+		return false
+	}
+	if term == "" || term == "dumb" || term == "linux" {
+		return true
+	}
+	return !strings.Contains(term, "256color")
+}
+
+func compatTheme(t Theme) Theme {
+	t.Name = t.Name + "-compat"
+	t.Icon = "◐"
+	t.Compat = true
+
+	t.Bg = "0"
+	t.BgHeader = "0"
+	t.BgInput = "0"
+	t.BgPanel = "0"
+	t.Fg = "15"
+	t.Border = "8"
+	t.Accent = "14"
+	t.Accent2 = "11"
+	t.Success = "10"
+	t.Error = "9"
+	t.Warning = "11"
+	t.Info = "14"
+	t.Muted = "7"
+	t.ToolIcon = "11"
+	t.ToolDone = "10"
+	t.ReadIcon = "14"
+	t.EditIcon = "11"
+	t.DiffAdd = "10"
+	t.DiffDel = "9"
+	t.Thinking = "14"
+	t.Usage = "7"
+	t.PromptUser = "14"
+	t.PromptProject = "10"
+	t.PromptBranch = "11"
+	t.PromptSymbol = "14"
+	t.PlanBarFg = "15"
+	t.PlanBarBg = "4"
+	t.ExecBarFg = "15"
+	t.ExecBarBg = "5"
+	t.PlanLabelFg = "15"
+	t.PlanLabelBg = "4"
+	t.ExecLabelFg = "15"
+	t.ExecLabelBg = "5"
+	t.Banner = "14"
+	t.BannerSub = "7"
+	t.Separator = "8"
+	t.CodeTheme = "ansi"
+
+	return t.derive()
+}
+
 func isThemeName(name string) bool {
-	switch strings.ToLower(strings.TrimSpace(name)) {
+	name = strings.ToLower(strings.TrimSpace(name))
+	name = strings.TrimSuffix(name, "-compat")
+	switch name {
 	case "dark", "oled", "light":
 		return true
 	default:
 		return false
 	}
+}
+
+func savedThemeName(t Theme) string {
+	return strings.TrimSuffix(t.Name, "-compat")
 }
 
 // ThemeNames returns the order shown by /theme.

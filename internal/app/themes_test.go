@@ -16,13 +16,66 @@ func TestThemeNamesExposeOnlyCurrentCoreThemes(t *testing.T) {
 }
 
 func TestLegacyThemeNamesNormalizeToDark(t *testing.T) {
-	if got := themeForName("oak").Name; got != "dark" {
+	getenv := env(map[string]string{"COLORTERM": "truecolor", "TERM": "xterm-256color"})
+	if got := themeForNameWithEnv("oak", getenv).Name; got != "dark" {
 		t.Fatalf("legacy theme should normalize to dark, got %q", got)
 	}
 	if isThemeName("oak") {
 		t.Fatalf("legacy theme should not be exposed as selectable")
 	}
-	if got := themeForName("oled").Name; got != "oled" {
+	if got := themeForNameWithEnv("oled", getenv).Name; got != "oled" {
 		t.Fatalf("oled theme should be selectable, got %q", got)
 	}
+}
+
+func TestWeakTerminalUsesCompatTheme(t *testing.T) {
+	got := themeForNameWithEnv("dark", env(map[string]string{"TERM": "linux"}))
+	if !got.Compat {
+		t.Fatalf("linux console should use compat theme")
+	}
+	if got.Name != "dark-compat" {
+		t.Fatalf("compat theme name mismatch: got %q", got.Name)
+	}
+	if got.Bg != "0" || got.Fg != "15" || got.Accent != "14" {
+		t.Fatalf("compat palette should use stable ANSI colors, got bg=%q fg=%q accent=%q", got.Bg, got.Fg, got.Accent)
+	}
+	if saved := savedThemeName(got); saved != "dark" {
+		t.Fatalf("compat theme should persist base name, got %q", saved)
+	}
+}
+
+func TestTruecolorTerminalKeepsRgbTheme(t *testing.T) {
+	got := themeForNameWithEnv("dark", env(map[string]string{"TERM": "xterm-256color", "COLORTERM": "truecolor"}))
+	if got.Compat {
+		t.Fatalf("truecolor terminal should keep RGB theme")
+	}
+	if got.Name != "dark" {
+		t.Fatalf("theme name mismatch: got %q", got.Name)
+	}
+	if got.Bg == "0" || got.Fg == "15" {
+		t.Fatalf("truecolor theme should not use compat ANSI palette")
+	}
+}
+
+func TestCompatThemeOverride(t *testing.T) {
+	forcedOn := themeForNameWithEnv("light", env(map[string]string{
+		"TERM":               "xterm-256color",
+		"COLORTERM":          "truecolor",
+		"SPORE_THEME_COMPAT": "1",
+	}))
+	if !forcedOn.Compat {
+		t.Fatalf("SPORE_THEME_COMPAT=1 should force compat mode")
+	}
+
+	forcedOff := themeForNameWithEnv("light", env(map[string]string{
+		"TERM":               "linux",
+		"SPORE_THEME_COMPAT": "0",
+	}))
+	if forcedOff.Compat {
+		t.Fatalf("SPORE_THEME_COMPAT=0 should disable compat mode")
+	}
+}
+
+func env(values map[string]string) func(string) string {
+	return func(key string) string { return values[key] }
 }
