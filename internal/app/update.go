@@ -94,6 +94,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.updateKey(msg)
 
+// ── Model routing preset messages ──
+	case presetsFetchedMsg:
+		m.presetNames = []string(msg.names...)
+	case presetsAppliedMsg:
+		m.presetNames = []string(msg.names...)
+		fmt.Fprintf(os.Stderr, "Preset \"%s\" applied successfully\n", msg.name)
+	case presetsError:
+		fmt.Fprintf(os.Stderr, "Error: %s\n", string(msg.message))
 	case connOpenMsg:
 		first := !m.connected
 		m.connected = true

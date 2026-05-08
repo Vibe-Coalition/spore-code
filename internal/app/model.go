@@ -92,6 +92,10 @@ type Model struct {
 	gitBranch  string
 	agentName  string
 
+	// presetNames holds model routing preset names fetched from the backend.
+	// Used for /models_preset autocomplete.
+	presetNames []string
+
 	// workflowPhase is the typed UI state for the planning/execution flow.
 	// Legacy prose markers still feed it, but render code reads this field
 	// instead of rediscovering the phase from chat text.

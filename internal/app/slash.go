@@ -152,6 +152,28 @@ func (m *Model) refreshSuggest() {
 	// "/sc"; for "/scope " it's "/scope " (with the space) — so only
 	// `/scope strict` / `/scope expanded` survive, not `/scope` itself.
 	prefix := text
+	// Dynamic preset suggestions for /models_preset
+	if strings.HasPrefix(prefix, "/models_preset") {
+		argPrefix := strings.TrimPrefix(prefix, "/models_preset")
+		argPrefix = strings.TrimSpace(argPrefix)
+		out := make([]slashEntry, 0, 1+len(m.presetNames))
+		if prefix == "/models_preset" || prefix == "/models_preset " {
+			out = append(out, slashEntry{"/models_preset", "/models_preset <name> — apply a model routing preset"})
+		}
+		for _, name := range m.presetNames {
+			candidate := "/models_preset " + name
+			if argPrefix == "" || strings.HasPrefix(name, argPrefix) {
+				out = append(out, slashEntry{candidate, "apply preset \"" + name + "\""})
+			}
+		}
+		m.suggest.matches = out
+		m.suggest.visible = len(out) > 0
+		if m.suggest.cursor >= len(out) {
+			m.suggest.cursor = 0
+		}
+		return
+	}
+
 	out := make([]slashEntry, 0, len(slashCatalog))
 	for _, e := range slashCatalog {
 		if strings.HasPrefix(e.cmd, prefix) {
