@@ -1,4 +1,5 @@
 <p align="center">
+  <img src="assets/spore-logo.svg" alt="Spore logo" width="96" height="96"><br>
   <strong>Spore Code</strong><br>
   The terminal companion for Spore Core: local tools, project memory, and an agent in your repo.
 </p>
