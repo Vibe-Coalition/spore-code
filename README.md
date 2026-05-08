@@ -1,177 +1,153 @@
 # Spore Code
 
-Terminal coding assistant that talks to a Spore Core (SPORE) server over
-WebSocket. Single static Go binary per OS/arch — no Python, no Node, no
-runtime dependencies; launches from any directory once dropped in `$PATH`.
+Spore Code is the terminal coding client for Spore Core. It opens a TUI in the
+current project, connects to the Spore Core `spore-code` plugin over HTTP and
+WebSocket, streams the conversation, and executes approved local tools on the
+user's machine.
 
-The CLI is **`spore`**; the product is **Spore Code**; the server-side
-plugin is **`spore-code`**.
+The command is `spore`. The product is Spore Code. The server plugin is
+`spore-code`.
 
 ## Install
 
-One-liner installers detect your OS+arch, download the matching release
-binary, verify it (ELF/Mach-O/PE magic check), atomic-rename into place,
-and handle PATH setup. Re-running upgrades in place.
-
-**Linux:**
+Linux:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/yumlevi/spore-code/main/install.sh | sh
 ```
 
-**Windows (PowerShell):**
+Windows PowerShell:
 
 ```powershell
 irm https://raw.githubusercontent.com/yumlevi/spore-code/main/install.ps1 | iex
 ```
 
-Optional overrides:
+Optional installer overrides:
 
-| Variable                | Default                                            | Effect                  |
-| ----------------------- | -------------------------------------------------- | ----------------------- |
-| `SPORE_CODE_VERSION`    | `latest`                                           | Pin a tag like `v1.0.4` |
-| `SPORE_CODE_DIR`        | `~/.local/bin` (Unix) / `%USERPROFILE%\.spore-code\bin` (Win) | Custom install dir |
+| Variable | Default | Purpose |
+|---|---|---|
+| `SPORE_CODE_VERSION` | `latest` | Install a specific release tag |
+| `SPORE_CODE_DIR` | `~/.local/bin` or `%USERPROFILE%\.spore-code\bin` | Install directory |
 
-## Usage
+## First Launch
 
-First launch (no `~/.spore-code/config.toml`) runs the setup wizard:
-host + port → username → invite key or account password → theme. The wizard
-tests the secret both ways, so you do not have to choose an auth mode manually.
-After that:
+Run `spore` from a project directory. If `~/.spore-code/config.toml` does not
+exist, the setup wizard asks for:
+
+- Spore Core host and port,
+- username,
+- invite key or account password,
+- theme.
+
+The wizard exchanges invite/password credentials for a revocable device token.
+Future launches use the device token and do not need the web app open.
+
+## Common Commands
 
 ```sh
-spore                       # normal mode — REPL in your cwd
-spore -c                    # resume the most recent session in this cwd
-spore --session cli:…-…-…   # resume a specific session
-spore --plan                # start in plan mode
-spore --host spore.tld --port 443 --user foo
-spore logout                # clear saved credentials without launching the TUI
+spore                         # start a fresh session in this directory
+spore -c                      # resume a previous project session
+spore --session cli:...       # resume a specific session id
+spore --plan                  # start in plan mode
+spore --host spore.tld --port 443 --user yam
+spore --version
+spore logout                  # revoke/clear saved credentials
 ```
 
-Inside the TUI, type `/help` for the full slash-command list. Highlights:
+Inside the TUI, type `/help` for the full slash-command list. Common commands:
 
-- `/init` — scaffold a `SPORE.md` template + add `.spore-code/` to `.gitignore`
-- `/index` — build/refresh the per-project code index (`.spore-code/index.db`)
-- `/architecture`, `/why <symbol>`, `/calls <symbol>`, `/impact` — structural code search
-- `/scope strict|expanded` — toggle file-op sandbox
-- `/mode auto|ask|locked|yolo|rules` — tool-approval policy
-- `/scripts`, `/decisions` — graph-backed project memory (server-side)
-- `/update install` — upgrade in place to the latest release
-- `/logout` — clear saved credentials and exit
+| Command | Purpose |
+|---|---|
+| `/plan` | toggle plan/execute mode |
+| `/init` | create `SPORE.md` and add `.spore-code/` to `.gitignore` |
+| `/index` | build or refresh `.spore-code/index.db` |
+| `/architecture`, `/why`, `/calls`, `/impact` | structural code navigation |
+| `/scope strict\|expanded` | control file-op sandboxing |
+| `/mode auto\|ask\|locked\|yolo\|rules` | control tool approvals |
+| `/models_preset` | apply or clear a device-local model routing preset |
+| `/display` | toggle thinking, tools, and usage surfaces |
+| `/update` | check, install, or list releases |
+| `/logout` | clear saved credentials and exit |
 
-## Build (from source)
+## How It Works
 
-Requires Go 1.22+ and `zig` 0.13+ for cross-compile (CGO toolchain — the
-tree-sitter language grammars vendor C code).
+Spore Code sends project context separately from the user message so project
+metadata does not accumulate in chat history. That context includes cwd, project
+name, git branch/status, `SPORE.md`, a shallow tree, available runtimes, local
+tool names, plan/execute mode, scope mode, code-index status, OS/arch, and
+best-effort hardware details.
+
+Tool ownership is split:
+
+- Spore Code owns local machine tools such as `exec`, file operations, git
+  helpers, background processes, tests, and code-index lookups.
+- Spore Core owns server tools such as graph memory, web search, channels,
+  remote SSH, browser automation, wakeups, and settings.
+- Server-owned or unknown tools are not executed locally by the CLI.
+
+The TUI shows chat, activity, code previews, diffs, tool approvals, plan
+approval, `ask_user` questions, compaction status, and output logs.
+
+## Build From Source
+
+Requires Go 1.25+ and a C compiler. Release cross-compiles require Zig 0.13+
+because tree-sitter language grammars use CGO.
 
 ```sh
 go mod tidy
-make build          # ./spore
-make install        # ~/.local/bin/spore
-make release        # cross-compile linux/darwin/windows × amd64/arm64 into dist/
+make build
+make install
+make release
 ```
 
-On hosts without `make` or a system C compiler, use the repo-local scripts.
-They use `zig cc` for CGO when gcc/clang is unavailable:
+Script alternatives:
 
 ```sh
-scripts/build.sh    # ./spore
-scripts/test.sh     # go test ./...
-scripts/release.sh  # linux/windows amd64+arm64 into dist/
+scripts/build.sh
+scripts/test.sh
+scripts/release.sh
 ```
 
-Builds are stamped from `git describe --tags --dirty --always` by default.
-Pass `VERSION=v1.0.7` when producing binaries for a published release.
-The scripts also stage the current-platform binary into
-`~/.spore-code/updates`, so a running client can apply it with
-`/update install local`. Set `SPORE_CODE_STAGE_UPDATE=0` to skip staging.
+Builds stamp the version from `scripts/version.sh`. Release binaries are named:
 
-## Self-update
-
-```
-/update check        check the stable channel for a newer release
-/update install      install the latest stable
-/update install pre  install the latest pre-release
-/update list         list recent releases
+```text
+spore-linux-amd64
+spore-linux-arm64
+spore-windows-amd64.exe
+spore-windows-arm64.exe
 ```
 
-On Linux/macOS the running binary is atomically replaced via
-`rename(2)`. On Windows the running `spore.exe` is renamed aside as
-`spore.exe.old` first; restart to use the new version.
+Darwin builds are opt-in with `INCLUDE_DARWIN=1`.
 
-## Configuration
+## Documentation
 
-Per-project: `.spore-code/` directory holds the local code index, scratch
-scripts, and per-session logs. Add `.spore-code/` to `.gitignore`
-(`/init` does this for you).
+- [Architecture](docs/architecture.md)
+- [Configuration](docs/configuration.md)
+- [Protocol](docs/protocol.md)
+- [Tools](docs/tools.md)
+- [TUI](docs/tui.md)
+- [Security](docs/security.md)
+- [Releases](docs/releases.md)
+- [Contributing](CONTRIBUTING.md)
+- [For AI Coding Assistants](FOR_AGENTS.md)
 
-Global: `~/.spore-code/config.toml`:
+## Repository Layout
 
-```toml
-[connection]
-host = "spore.example.com"
-port = 18810
-user = "yam"
-auth_method = "device"
-key = ""
-password = ""
-device_id = "<server-issued-device-id>"
-
-# Invite keys and account passwords are only used during setup. Spore Code
-# exchanges them for a revocable device token and does not keep them here.
-
-[display]
-theme = "dark"
-
-[session]
-auto_resume = false
+```text
+cmd/spore/             CLI entry point, setup wizard, session picker
+internal/app/          Bubble Tea TUI, commands, modals, themes, update loop
+internal/conn/         HTTP auth and WebSocket client
+internal/proto/        wire-protocol structs
+internal/tools/        local tool executor and tool implementations
+internal/codeindex/    tree-sitter walker, parser, SQLite code index
+internal/config/       config, device token storage, keychain fallback
+internal/sessionlog/   local JSONL session/debug logs
+internal/bg/           background process manager and child lifetime handling
+scripts/               build, test, release, version helpers
 ```
 
-Run `spore` once to go through the wizard, or write the TOML by hand.
-The config file is written with `0600` permissions. Password auth is stored
-there so reconnects and future CLI launches can authenticate without opening
-the web app.
+## Compatibility
 
-## Releases
-
-Four binaries per default release at
-<https://github.com/yumlevi/spore-code/releases/latest>:
-
-```
-spore-linux-amd64       Linux  x86_64
-spore-linux-arm64       Linux  aarch64
-spore-windows-amd64.exe Windows x64
-spore-windows-arm64.exe Windows ARM64
-```
-
-## Build status
-
-Linux + Windows targets cross-compile cleanly via `zig cc`. Darwin
-targets are opt-in with `INCLUDE_DARWIN=1 make release` and currently
-paused for official releases — zig 0.13's bundled darwin SDK is missing
-`libresolv.tbd` + the Apple frameworks Go's CGO net stack needs. Builds
-will return when the build host has Apple SDK installed (or zig 0.14
-ships the missing stubs).
-
-## Compat
-
-Pairs with a Spore Core server running the `spore-code` plugin
-(`anima-new/plugins/spore-code/`). Older SPORE deployments without the
-plugin will reject `/api/spore-code/auth`.
-
-## Repo layout
-
-```
-.
-├── cmd/spore/main.go            entry point
-├── internal/app/                TUI (model, view, update, slash registry)
-├── internal/codeindex/          tree-sitter walker + SQLite store
-├── internal/conn/               WebSocket client
-├── internal/tools/              local tool execution (read_file, exec, …)
-├── internal/proto/              wire-protocol structs
-├── internal/sessionlog/         per-session JSONL + debug logs
-├── internal/config/             ~/.spore-code/config.toml read/write
-├── install.sh / install.ps1     one-line installers
-├── Makefile                     build + cross-compile via zig cc
-└── dist/                        per-arch release binaries (gitignored)
-```
+Spore Code requires a Spore Core server with the `spore-code` plugin installed.
+Older servers without `/api/spore-code/auth` and `/api/spore-code/session` will
+reject setup or session creation.
