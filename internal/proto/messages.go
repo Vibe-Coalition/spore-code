@@ -35,15 +35,21 @@ type ChatThinking struct {
 //
 //	tool_exec_start, tool_exec_done, interjection, interjected, waiting}
 type ChatStatus struct {
-	Type        string `json:"type"`
-	Status      string `json:"status"`
-	Tool        string `json:"tool,omitempty"`
-	Detail      string `json:"detail,omitempty"`
-	ResultChars int    `json:"resultChars,omitempty"`
-	DurationMs  int    `json:"durationMs,omitempty"`
-	Iteration   int    `json:"iteration,omitempty"`
-	Tokens      int    `json:"tokens,omitempty"`
-	Count       int    `json:"count,omitempty"`
+	Type             string `json:"type"`
+	Status           string `json:"status"`
+	Tool             string `json:"tool,omitempty"`
+	Detail           string `json:"detail,omitempty"`
+	ResultChars      int    `json:"resultChars,omitempty"`
+	DurationMs       int    `json:"durationMs,omitempty"`
+	Iteration        int    `json:"iteration,omitempty"`
+	Tokens           int    `json:"tokens,omitempty"`
+	Count            int    `json:"count,omitempty"`
+	BeforeTokens     int    `json:"beforeTokens,omitempty"`
+	AfterTokens      int    `json:"afterTokens,omitempty"`
+	TargetTokens     int    `json:"targetTokens,omitempty"`
+	LimitTokens      int    `json:"limitTokens,omitempty"`
+	UsedPercent      int    `json:"usedPercent,omitempty"`
+	RemainingPercent int    `json:"remainingPercent,omitempty"`
 }
 
 // ChatTool — a tool call happened; UI may highlight.

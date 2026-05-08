@@ -76,6 +76,45 @@ func TestToolExecStartClosesAssistantSegment(t *testing.T) {
 	}
 }
 
+func TestCompactionStatusShowsContextRemaining(t *testing.T) {
+	m := &Model{
+		currentStreamIdx: -1,
+		viewport:         viewport.New(80, 10),
+		theme:            themeDark,
+	}
+
+	m.handleStatus(proto.ChatStatus{
+		Status:           "compaction-start",
+		Count:            12,
+		BeforeTokens:     950,
+		LimitTokens:      1000,
+		UsedPercent:      95,
+		RemainingPercent: 5,
+	})
+
+	if !strings.Contains(m.status, "compacting 12 earlier turns") || !strings.Contains(m.status, "context 5% left") {
+		t.Fatalf("expected compaction status with remaining context, got %q", m.status)
+	}
+	if len(m.messages) != 1 || !strings.Contains(m.messages[0].Text, "context 5% left") {
+		t.Fatalf("expected transcript line with remaining context, messages=%#v", m.messages)
+	}
+
+	m.handleStatus(proto.ChatStatus{
+		Status:           "compaction-done",
+		Count:            12,
+		AfterTokens:      510,
+		LimitTokens:      1000,
+		RemainingPercent: 49,
+	})
+
+	if m.status != "" {
+		t.Fatalf("expected compaction done to clear status, got %q", m.status)
+	}
+	if len(m.messages) != 2 || !strings.Contains(m.messages[1].Text, "context 49% left") {
+		t.Fatalf("expected done transcript line with remaining context, messages=%#v", m.messages)
+	}
+}
+
 func TestAppendActivityHonorsDisplayFlags(t *testing.T) {
 	off := false
 	m := &Model{

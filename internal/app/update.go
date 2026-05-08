@@ -1341,6 +1341,36 @@ func formatUsageSummary(v proto.ChatDone) string {
 	return "Usage: " + strings.Join(parts, " · ")
 }
 
+func compactionContextSuffix(v proto.ChatStatus) string {
+	remaining, ok := compactionRemainingPercent(v)
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf(" · context %d%% left", remaining)
+}
+
+func compactionRemainingPercent(v proto.ChatStatus) (int, bool) {
+	remaining := v.RemainingPercent
+	if remaining == 0 {
+		switch {
+		case v.UsedPercent > 0:
+			remaining = 100 - v.UsedPercent
+		case v.AfterTokens > 0 && v.LimitTokens > 0:
+			remaining = 100 - int((float64(v.AfterTokens)/float64(v.LimitTokens))*100+0.5)
+		case v.BeforeTokens > 0 && v.LimitTokens > 0:
+			remaining = 100 - int((float64(v.BeforeTokens)/float64(v.LimitTokens))*100+0.5)
+		}
+	}
+	if remaining < 0 {
+		remaining = 0
+	}
+	if remaining > 100 {
+		remaining = 100
+	}
+	hasMeter := v.RemainingPercent > 0 || v.UsedPercent > 0 || v.LimitTokens > 0 || v.BeforeTokens > 0 || v.AfterTokens > 0
+	return remaining, hasMeter
+}
+
 func (m *Model) handleStatus(v proto.ChatStatus) {
 	switch v.Status {
 	case "thinking_start":
@@ -1394,21 +1424,23 @@ func (m *Model) handleStatus(v proto.ChatStatus) {
 		// CLI just looks frozen for ~5s while the summarizer LLM call
 		// runs. Surface it on the status bar AND in the transcript so
 		// the user knows it's actual work, not a hang.
+		suffix := compactionContextSuffix(v)
 		if v.Count > 0 {
-			m.status = fmt.Sprintf("⟳ compacting %d earlier turns…", v.Count)
-			m.pushChat("system", fmt.Sprintf("⟳ Compacting %d earlier turns to free context space…", v.Count))
+			m.status = fmt.Sprintf("⟳ compacting %d earlier turns%s…", v.Count, suffix)
+			m.pushChat("system", fmt.Sprintf("⟳ Compacting %d earlier turns to free context space%s…", v.Count, suffix))
 		} else {
-			m.status = "⟳ compacting earlier turns…"
-			m.pushChat("system", "⟳ Compacting earlier turns to free context space…")
+			m.status = fmt.Sprintf("⟳ compacting earlier turns%s…", suffix)
+			m.pushChat("system", fmt.Sprintf("⟳ Compacting earlier turns to free context space%s…", suffix))
 		}
 	case "compaction-done":
 		// Pair to compaction-start. Clear the status; surface a brief
 		// transcript line summarizing what happened.
 		m.status = ""
+		suffix := compactionContextSuffix(v)
 		if v.Count > 0 {
-			m.pushChat("system", fmt.Sprintf("✓ Compaction done — %d turns summarized.", v.Count))
+			m.pushChat("system", fmt.Sprintf("✓ Compaction done — %d turns summarized%s.", v.Count, suffix))
 		} else {
-			m.pushChat("system", "✓ Compaction done.")
+			m.pushChat("system", fmt.Sprintf("✓ Compaction done%s.", suffix))
 		}
 	}
 }
