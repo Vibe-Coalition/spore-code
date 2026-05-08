@@ -153,18 +153,21 @@ func (m *Model) refreshSuggest() {
 	// "/sc"; for "/scope " it's "/scope " (with the space) — so only
 	// `/scope strict` / `/scope expanded` survive, not `/scope` itself.
 	prefix := text
-	// Dynamic preset suggestions for /models_preset
-	if strings.HasPrefix(prefix, "/models_preset") {
-		argPrefix := strings.TrimPrefix(prefix, "/models_preset")
-		argPrefix = strings.TrimSpace(argPrefix)
-		out := make([]slashEntry, 0, 1+len(m.presetNames))
-		if prefix == "/models_preset" || prefix == "/models_preset " {
-			out = append(out, slashEntry{"/models_preset", "/models_preset <name> — apply a model routing preset"})
+	// Dynamic preset suggestions for /models_preset. Trigger once the
+	// user has typed enough of the command family to mean "models" so
+	// presets are visible before they type the argument separator.
+	if isModelsPresetSuggestPrefix(prefix) {
+		candidates := []slashEntry{
+			{"/models_preset", "/models_preset <name> — apply a model routing preset to this device"},
+			{"/models_preset server", "clear device preset override and use server routing"},
 		}
 		for _, name := range m.presetNames {
-			candidate := "/models_preset " + name
-			if argPrefix == "" || strings.HasPrefix(name, argPrefix) {
-				out = append(out, slashEntry{candidate, "apply preset \"" + name + "\""})
+			candidates = append(candidates, slashEntry{"/models_preset " + name, "apply preset \"" + name + "\""})
+		}
+		out := make([]slashEntry, 0, len(candidates))
+		for _, entry := range candidates {
+			if strings.HasPrefix(entry.cmd, prefix) {
+				out = append(out, entry)
 			}
 		}
 		m.suggest.matches = out
@@ -187,6 +190,11 @@ func (m *Model) refreshSuggest() {
 	if m.suggest.cursor >= len(out) {
 		m.suggest.cursor = 0
 	}
+}
+
+func isModelsPresetSuggestPrefix(prefix string) bool {
+	const cmd = "/models_preset"
+	return (len(prefix) >= len("/models") && strings.HasPrefix(cmd, prefix)) || strings.HasPrefix(prefix, cmd)
 }
 
 // handleSuggestKey intercepts navigation / accept keys while the dropdown

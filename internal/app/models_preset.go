@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -40,7 +41,7 @@ func fetchPresetsWithMode(m *Model, silent bool) tea.Msg {
 		return presetsFetchedMsg{err: fmt.Errorf("no auth token available for preset fetch"), silent: silent}
 	}
 
-	req, err := http.NewRequest("GET", base+"/api/models/routing-presets", nil)
+	req, err := http.NewRequest("GET", base+"/api/spore-code/routing-presets", nil)
 	if err != nil {
 		return presetsFetchedMsg{err: err, silent: silent}
 	}
@@ -77,46 +78,77 @@ func fetchPresetsWithMode(m *Model, silent bool) tea.Msg {
 
 // presetsAppliedMsg is sent after applying a preset via the backend.
 type presetsAppliedMsg struct {
-	name string
-	err  error
+	name    string
+	cleared bool
+	err     error
 }
 
 func applyPresetCmd(m *Model, name string) tea.Cmd {
 	return func() tea.Msg {
+		cleared, err := doApplyPreset(m, name)
 		return presetsAppliedMsg{
-			name: name,
-			err:  doApplyPreset(m, name),
+			name:    name,
+			cleared: cleared,
+			err:     err,
 		}
 	}
 }
 
-func doApplyPreset(m *Model, name string) error {
+func doApplyPreset(m *Model, name string) (bool, error) {
 	base := m.baseURL()
 	if !authTransportAllowed(base) {
-		return fmt.Errorf("refusing to apply preset over insecure HTTP to %s", base)
+		return false, fmt.Errorf("refusing to apply preset over insecure HTTP to %s", base)
 	}
 
 	token := m.authToken()
 	if token == "" {
-		return fmt.Errorf("no auth token available")
+		return false, fmt.Errorf("no auth token available")
 	}
 
-	req, err := http.NewRequest("POST", base+"/api/models/routing-presets/"+name+"/apply", nil)
+	if isServerPresetResetName(name) {
+		req, err := http.NewRequest("DELETE", base+"/api/spore-code/routing-presets/current", nil)
+		if err != nil {
+			return false, err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return false, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return false, fmt.Errorf("clear preset override: HTTP %d", resp.StatusCode)
+		}
+		return true, nil
+	}
+
+	payload, _ := json.Marshal(map[string]string{"name": name})
+	req, err := http.NewRequest("POST", base+"/api/spore-code/routing-presets/apply", bytes.NewReader(payload))
 	if err != nil {
-		return err
+		return false, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("apply preset %q: HTTP %d", name, resp.StatusCode)
+		return false, fmt.Errorf("apply preset %q: HTTP %d", name, resp.StatusCode)
 	}
-	return nil
+	return false, nil
+}
+
+func isServerPresetResetName(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "default", "server", "server-default", "reset", "clear":
+		return true
+	default:
+		return false
+	}
 }
 
 // handleModelsPreset processes /models_preset <NAME>.
@@ -127,11 +159,15 @@ func handleModelsPreset(m *Model, args []string) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg { return fetchPresets(m) }
 		}
 		list := strings.Join(m.presetNames, ", ")
-		m.pushChat("system", fmt.Sprintf("Available presets: %s\nUsage: /models_preset <name>", list))
+		m.pushChat("system", fmt.Sprintf("Available presets: %s\nUsage: /models_preset <name> (device only) or /models_preset server", list))
 		return m, nil
 	}
 
 	name := args[0]
+	if isServerPresetResetName(name) {
+		m.pushChat("system", "Clearing device preset override; this CLI will use server routing again.")
+		return m, applyPresetCmd(m, name)
+	}
 	m.pushChat("system", "Applying preset: "+name)
 	return m, applyPresetCmd(m, name)
 }
@@ -185,7 +221,7 @@ func (m *Model) authToken() string {
 func init() {
 	register(&slashCmd{
 		Name:    "/models_preset",
-		Help:    "List or apply a model routing preset (e.g. /models_preset fast)",
+		Help:    "List or apply a model routing preset to this device (e.g. /models_preset fast, /models_preset server)",
 		Handler: handleModelsPreset,
 	})
 }

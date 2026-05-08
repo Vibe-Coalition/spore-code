@@ -116,7 +116,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pushChat("system", "Preset apply failed: "+msg.err.Error())
 			break
 		}
-		m.pushChat("system", fmt.Sprintf("Preset %q applied successfully.", msg.name))
+		if msg.cleared {
+			m.pushChat("system", "Device preset override cleared; using server routing.")
+		} else {
+			m.pushChat("system", fmt.Sprintf("Preset %q applied to this device.", msg.name))
+		}
 	case connOpenMsg:
 		first := !m.connected
 		m.connected = true
