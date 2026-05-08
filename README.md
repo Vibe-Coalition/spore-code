@@ -1,8 +1,15 @@
-<p align="center">
-  <img src="assets/spore-logo.svg" alt="Spore logo" width="96" height="96"><br>
+<div align="center">
+<pre>
+    ███████╗██████╗  ██████╗ ██████╗ ███████╗     ██████╗ ██████╗ ██████╗ ███████╗
+    ██╔════╝██╔══██╗██╔═══██╗██╔══██╗██╔════╝    ██╔════╝██╔═══██╗██╔══██╗██╔════╝
+    ███████╗██████╔╝██║   ██║██████╔╝█████╗      ██║     ██║   ██║██║  ██║█████╗
+    ╚════██║██╔═══╝ ██║   ██║██╔══██╗██╔══╝      ██║     ██║   ██║██║  ██║██╔══╝
+    ███████║██║     ╚██████╔╝██║  ██║███████╗    ╚██████╗╚██████╔╝██████╔╝███████╗
+    ╚══════╝╚═╝      ╚═════╝ ╚═╝  ╚═╝╚══════╝     ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝
+</pre>
   <strong>Spore Code</strong><br>
   The terminal companion for Spore Core: local tools, project memory, and an agent in your repo.
-</p>
+</div>
 
 <p align="center">
   <a href="https://github.com/Vibe-Coalition"><img alt="Vibe Coalition" src="https://img.shields.io/badge/Vibe%20Coalition-Spore%20Code-ff7a1a?style=for-the-badge"></a>
@@ -10,15 +17,6 @@
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-2563eb?style=for-the-badge">
   <img alt="Vibe code welcome" src="https://img.shields.io/badge/vibe%20code-welcome-7c3aed?style=for-the-badge">
 </p>
-
-```text
-    ███████╗██████╗  ██████╗ ██████╗ ███████╗     ██████╗ ██████╗ ██████╗ ███████╗
-    ██╔════╝██╔══██╗██╔═══██╗██╔══██╗██╔════╝    ██╔════╝██╔═══██╗██╔══██╗██╔════╝
-    ███████╗██████╔╝██║   ██║██████╔╝█████╗      ██║     ██║   ██║██║  ██║█████╗
-    ╚════██║██╔═══╝ ██║   ██║██╔══██╗██╔══╝      ██║     ██║   ██║██║  ██║██╔══╝
-    ███████║██║     ╚██████╔╝██║  ██║███████╗    ╚██████╗╚██████╔╝██████╔╝███████╗
-    ╚══════╝╚═╝      ╚═════╝ ╚═╝  ╚═╝╚══════╝     ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝
-```
 
 # Spore Code
 
