@@ -36,8 +36,9 @@ prompt. It is a passion project and still moving fast.
 
 PRs are welcome. Bug reports, terminal polish, protocol hardening, docs, release
 automation, and vibe-coded experiments are all useful when they are clear,
-reviewable, and tested. Discord is available for project chat and coordination;
-a public invite link will be added here once it is finalized.
+reviewable, and tested. Join the
+[Spore Discord](https://discord.gg/mtsQ6GrdsN) for project chat and
+coordination.
 
 ## Install
 
