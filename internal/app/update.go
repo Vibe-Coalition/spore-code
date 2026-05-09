@@ -971,6 +971,12 @@ func (m *Model) handleFrame(f conn.Frame) tea.Cmd {
 			if role != "user" && role != "assistant" {
 				role = "system"
 			}
+			if role == "assistant" {
+				if marker, ok := planControlOnlyMarker(h.Text); ok {
+					m.rememberPlanControlMarker(marker)
+					continue
+				}
+			}
 			if _, dup := seen[historyKey(role, h.Text)]; dup {
 				continue
 			}

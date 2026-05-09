@@ -374,6 +374,10 @@ func (m *Model) loadLocalHistory() {
 		case "user":
 			userN++
 		case "assistant":
+			if marker, ok := planControlOnlyMarker(text); ok {
+				m.rememberPlanControlMarker(marker)
+				continue
+			}
 			asstN++
 		case "tool":
 			continue
@@ -667,15 +671,15 @@ func (m *Model) appendDelta(t string) {
 		return
 	}
 	// Only scan the new tail (with a small overlap to catch a marker
-	// that straddles two deltas — len("QUESTIONS:")=10 bytes is enough).
+	// that straddles two deltas).
 	// Was O(N) per delta over the full accumulated text → quadratic over
-	// the stream. Now O(len(t) + 10).
+	// the stream. Now O(len(t) + markerScanOverlap).
 	scanStart := m.questionsScanOff
 	if scanStart > len(msg.Text) {
 		scanStart = 0
 	}
-	if scanStart > 10 {
-		scanStart -= 10
+	if scanStart > markerScanOverlap {
+		scanStart -= markerScanOverlap
 	} else {
 		scanStart = 0
 	}
@@ -715,15 +719,35 @@ func findQuestionsMarkerFrom(s string, start int) int {
 	return findLineMarkerFrom(s, start, []string{"QUESTIONS:"})
 }
 
+var planControlMarkers = []string{
+	"RESEARCH_DONE:",
+	"NO_INTERVIEW_NEEDED:",
+	"NO_FOLLOWUP_QUESTIONS:",
+}
+
+const markerScanOverlap = len("NO_FOLLOWUP_QUESTIONS:")
+
 // findPlanControlMarkerFrom scans for internal plan-mode protocol
 // markers. These are consumed by the CLI state machine and should not
 // render as ordinary assistant prose.
 func findPlanControlMarkerFrom(s string, start int) int {
-	return findLineMarkerFrom(s, start, []string{
-		"RESEARCH_DONE:",
-		"NO_INTERVIEW_NEEDED:",
-		"NO_FOLLOWUP_QUESTIONS:",
-	})
+	return findLineMarkerFrom(s, start, planControlMarkers)
+}
+
+func planControlOnlyMarker(s string) (string, bool) {
+	trimmed := strings.TrimLeft(s, " \t\r\n")
+	for _, marker := range planControlMarkers {
+		if strings.HasPrefix(trimmed, marker) {
+			return marker, true
+		}
+	}
+	return "", false
+}
+
+func (m *Model) rememberPlanControlMarker(marker string) {
+	if marker == "RESEARCH_DONE:" {
+		m.planResearchDoneSeen = true
+	}
 }
 
 func findLineMarkerFrom(s string, start int, markers []string) int {

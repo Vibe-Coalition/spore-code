@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Vibe-Coalition/spore-code/internal/config"
+	"github.com/Vibe-Coalition/spore-code/internal/conn"
 	"github.com/Vibe-Coalition/spore-code/internal/proto"
 )
 
@@ -89,6 +90,61 @@ func TestPlanControlResearchDoneIsHiddenButDrivesWorkflow(t *testing.T) {
 	}
 	if len(m.messages) == 0 || !strings.Contains(m.messages[len(m.messages)-1].Text, "Research complete") {
 		t.Fatalf("expected concise system progress message, got %#v", m.messages)
+	}
+}
+
+func TestPlanControlNoFollowupIsHiddenButDrivesWorkflow(t *testing.T) {
+	m := &Model{currentStreamIdx: -1, planMode: true}
+
+	m.appendDelta("NO_FOLLOWUP")
+	m.appendDelta("_QUESTIONS: single root cause maps cleanly to existing methods\n")
+	m.endStream()
+
+	if len(m.messages) != 1 {
+		t.Fatalf("expected hidden assistant control message to remain for post-stream checks, got %#v", m.messages)
+	}
+	if got := strings.TrimSpace(m.messages[0].Text); got != "" {
+		t.Fatalf("expected NO_FOLLOWUP_QUESTIONS to be hidden from visible text, got %q", got)
+	}
+	if !strings.Contains(m.messages[0].PlanControlBuf, "NO_FOLLOWUP_QUESTIONS:") {
+		t.Fatalf("expected control buffer to keep no-followup marker, got %#v", m.messages[0])
+	}
+
+	cmd := m.postStreamChecks()
+	if cmd == nil {
+		t.Fatal("expected NO_FOLLOWUP_QUESTIONS to trigger build-plan command")
+	}
+	for _, msg := range m.messages {
+		if strings.Contains(msg.Text, "single root cause") || strings.Contains(msg.PlanControlBuf, "single root cause") {
+			t.Fatalf("raw no-followup block leaked into visible/session messages: %#v", msg)
+		}
+	}
+	if len(m.messages) == 0 || !strings.Contains(m.messages[len(m.messages)-1].Text, "No follow-up questions") {
+		t.Fatalf("expected concise system progress message, got %#v", m.messages)
+	}
+}
+
+func TestPlanControlHistoryFramesAreHidden(t *testing.T) {
+	m := &Model{currentStreamIdx: -1, planMode: true}
+	raw, err := json.Marshal(proto.ChatHistory{
+		Type: "chat:history",
+		Messages: []proto.HistoryMessage{
+			{Role: "assistant", Text: "RESEARCH_DONE:\ncode_targets:\n  files_to_modify: []"},
+			{Role: "assistant", Text: "NO_FOLLOWUP_QUESTIONS: single root cause maps cleanly to existing methods"},
+			{Role: "assistant", Text: "Visible answer"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m.handleFrame(conn.Frame{Type: "chat:history", Raw: raw})
+
+	if !m.planResearchDoneSeen {
+		t.Fatal("expected hidden RESEARCH_DONE history frame to preserve workflow state")
+	}
+	if len(m.messages) != 1 || m.messages[0].Text != "Visible answer" {
+		t.Fatalf("expected only user-visible history to render, got %#v", m.messages)
 	}
 }
 
