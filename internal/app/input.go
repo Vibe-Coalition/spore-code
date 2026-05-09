@@ -57,6 +57,11 @@ func (m *Model) handleTextInputKey(km tea.KeyMsg) (tea.Cmd, bool) {
 	if km.Paste {
 		if text := keyText(km); text != "" {
 			m.flushPendingInputText()
+			if m.modal == modalNone && shouldCompactPastedInput(text) {
+				m.insertCompactPastedInput(text)
+				m.refreshSuggest()
+				return nil, true
+			}
 			m.insertInputText(m.normalizeInputText(text))
 			return nil, true
 		}
@@ -97,10 +102,12 @@ func (m *Model) queueInputText(text string, normalize bool) tea.Cmd {
 	if text == "" {
 		return nil
 	}
+	m.addInputBurstLineCount(text)
 	m.inputBurst = append(m.inputBurst, []rune(text)...)
 	if normalize {
 		m.inputBurstNormalize = true
 	}
+	m.updateInputBurstCompactState()
 	m.inputBurstScheduled = true
 	m.inputBurstSeq++
 	seq := m.inputBurstSeq
@@ -112,18 +119,103 @@ func (m *Model) queueInputText(text string, normalize bool) tea.Cmd {
 
 func (m *Model) flushPendingInputText() {
 	if len(m.inputBurst) == 0 {
-		m.inputBurstScheduled = false
-		m.inputBurstNormalize = false
+		m.resetInputBurst()
 		return
 	}
 	text := string(m.inputBurst)
 	if m.inputBurstNormalize || len(m.inputBurst) >= 16 {
 		text = m.normalizeInputText(text)
 	}
+	if m.inputBurstCompact {
+		m.finalizeInputBurstCompact(text)
+		m.resetInputBurst()
+		return
+	}
+	m.resetInputBurst()
+	m.insertInputText(text)
+}
+
+func (m *Model) resetInputBurst() {
 	m.inputBurst = nil
+	m.inputBurstLines = 0
 	m.inputBurstScheduled = false
 	m.inputBurstNormalize = false
-	m.insertInputText(text)
+	m.inputBurstCompact = false
+	m.inputBurstCompactAt = 0
+}
+
+func (m *Model) addInputBurstLineCount(text string) {
+	if len(m.inputBurst) == 0 {
+		m.inputBurstLines = pastedInputLineCount(text)
+		return
+	}
+	m.inputBurstLines += strings.Count(text, "\n")
+}
+
+func (m *Model) updateInputBurstCompactState() {
+	if m.modal != modalNone || len(m.inputBurst) == 0 {
+		return
+	}
+	if !m.inputBurstCompact {
+		if len(m.inputBurst) < compactPasteMinRunes && m.inputBurstLines < compactPasteMinLines {
+			return
+		}
+		placeholder := pastedInputPlaceholder(m.inputBurstLines)
+		m.deletePastedInputAtCursor()
+		m.input.InsertString(placeholder)
+		m.pastedInputs = append(m.pastedInputs, pastedInputSegment{
+			Placeholder: placeholder,
+			Text:        string(m.inputBurst),
+		})
+		m.inputBurstCompact = true
+		m.inputBurstCompactAt = len(m.pastedInputs) - 1
+		m.refreshSuggest()
+		return
+	}
+	m.replaceInputBurstCompactPlaceholder(pastedInputPlaceholder(m.inputBurstLines))
+}
+
+func (m *Model) finalizeInputBurstCompact(text string) {
+	if !m.inputBurstCompact || m.inputBurstCompactAt < 0 || m.inputBurstCompactAt >= len(m.pastedInputs) {
+		return
+	}
+	m.pastedInputs[m.inputBurstCompactAt].Text = text
+	m.replaceInputBurstCompactPlaceholder(pastedInputPlaceholder(pastedInputLineCount(text)))
+	m.reconcilePastedInputs()
+	m.refreshSuggest()
+}
+
+func (m *Model) finalizeInputBurstCompactIfActive() {
+	if !m.inputBurstCompact || len(m.inputBurst) == 0 {
+		return
+	}
+	text := string(m.inputBurst)
+	if m.inputBurstNormalize || len(m.inputBurst) >= 16 {
+		text = m.normalizeInputText(text)
+	}
+	m.finalizeInputBurstCompact(text)
+	m.resetInputBurst()
+}
+
+func (m *Model) replaceInputBurstCompactPlaceholder(next string) {
+	if !m.inputBurstCompact || m.inputBurstCompactAt < 0 || m.inputBurstCompactAt >= len(m.pastedInputs) {
+		return
+	}
+	old := m.pastedInputs[m.inputBurstCompactAt].Placeholder
+	if old == next {
+		return
+	}
+	display := m.input.Value()
+	idx := strings.Index(display, old)
+	if idx < 0 {
+		m.pastedInputs[m.inputBurstCompactAt].Placeholder = next
+		return
+	}
+	updated := display[:idx] + next + display[idx+len(old):]
+	cursor := utf8.RuneCountInString(display[:idx]) + utf8.RuneCountInString(next)
+	m.pastedInputs[m.inputBurstCompactAt].Placeholder = next
+	m.input.SetValue(updated)
+	m.setInputCursorOffset(updated, cursor)
 }
 
 func (m *Model) insertInputText(text string) {
@@ -150,10 +242,22 @@ func (m *Model) insertInputText(text string) {
 }
 
 func shouldCompactPastedInput(text string) bool {
-	if strings.TrimSpace(text) == "" {
-		return false
+	nonSpace := false
+	lineCount := 1
+	runeCount := 0
+	for _, r := range text {
+		runeCount++
+		if r > ' ' {
+			nonSpace = true
+		}
+		if r == '\n' {
+			lineCount++
+		}
+		if nonSpace && (runeCount >= compactPasteMinRunes || lineCount >= compactPasteMinLines) {
+			return true
+		}
 	}
-	return utf8.RuneCountInString(text) >= compactPasteMinRunes || pastedInputLineCount(text) >= compactPasteMinLines
+	return false
 }
 
 func pastedInputLineCount(text string) int {
@@ -194,10 +298,14 @@ func (m *Model) setInputDraftText(text string) {
 }
 
 func (m *Model) clearPastedInputs() {
+	if m.inputBurstCompact {
+		m.resetInputBurst()
+	}
 	m.pastedInputs = nil
 }
 
 func (m *Model) expandPastedInputText(display string) string {
+	m.finalizeInputBurstCompactIfActive()
 	if len(m.pastedInputs) == 0 || display == "" {
 		return display
 	}

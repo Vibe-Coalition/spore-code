@@ -63,6 +63,43 @@ func TestLongBracketedPasteCompactsAndSendsFullText(t *testing.T) {
 	}
 }
 
+func TestStreamedLongPasteShowsPlaceholderBeforeFlush(t *testing.T) {
+	m := inputTestModel(t)
+	pasted := numberedLines(25)
+
+	for i := 1; i <= 20; i++ {
+		next, _ := m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("line " + strconv.Itoa(i))})
+		m = next.(*Model)
+		if i < 20 {
+			next, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyEnter})
+			m = next.(*Model)
+		}
+	}
+
+	if got := m.input.Value(); got != "[Pasted 20 lines]" {
+		t.Fatalf("streamed paste should show placeholder before debounce flush, got %q", got)
+	}
+	if !m.inputBurstCompact {
+		t.Fatalf("streamed long paste should be in compact burst mode")
+	}
+
+	for i := 21; i <= 25; i++ {
+		next, _ := m.updateKey(tea.KeyMsg{Type: tea.KeyEnter})
+		m = next.(*Model)
+		next, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("line " + strconv.Itoa(i))})
+		m = next.(*Model)
+	}
+	if got := m.input.Value(); got != "[Pasted 25 lines]" {
+		t.Fatalf("streamed paste placeholder should update line count, got %q", got)
+	}
+
+	next, _ := m.Update(inputTextFlushMsg{seq: m.inputBurstSeq})
+	m = next.(*Model)
+	if got := m.expandPastedInputText(m.input.Value()); got != pasted {
+		t.Fatalf("streamed compact paste did not preserve full text\nwant: %q\n got: %q", pasted, got)
+	}
+}
+
 func TestCompactPasteExpandsWithSurroundingText(t *testing.T) {
 	m := inputTestModel(t)
 	pasted := numberedLines(25)

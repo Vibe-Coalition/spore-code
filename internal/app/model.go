@@ -219,9 +219,12 @@ type Model struct {
 	// as a long stream of ordinary key events; batching those runes keeps
 	// paste responsive and prevents one full render per character.
 	inputBurst          []rune
+	inputBurstLines     int
 	inputBurstSeq       uint64
 	inputBurstScheduled bool
 	inputBurstNormalize bool
+	inputBurstCompact   bool
+	inputBurstCompactAt int
 	inputAttachments    []inputAttachment
 	pastedInputs        []pastedInputSegment
 }

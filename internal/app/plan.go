@@ -110,9 +110,7 @@ func (m *Model) updatePlanModal(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if pm.noting {
 		switch km.Type {
 		case tea.KeyEsc:
-			m.inputBurst = nil
-			m.inputBurstScheduled = false
-			m.inputBurstNormalize = false
+			m.resetInputBurst()
 			pm.noting = false
 			pm.feedback = ""
 			return m, nil
