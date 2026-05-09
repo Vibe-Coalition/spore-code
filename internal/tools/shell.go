@@ -168,6 +168,7 @@ func Exec(input map[string]any, cwd string, logDir string, pm *bg.Manager, on fu
 	// Log file setup — .spore-code/logs/<ts>.log.
 	var logPath string
 	var logW *os.File
+	backgroundHandedOff := false
 	if logDir != "" {
 		if err := os.MkdirAll(logDir, 0o755); err == nil {
 			logPath = filepath.Join(logDir, fmt.Sprintf("exec-%s.log", time.Now().Format("20060102-150405")))
@@ -178,13 +179,17 @@ func Exec(input map[string]any, cwd string, logDir string, pm *bg.Manager, on fu
 		}
 	}
 	defer func() {
-		if logW != nil {
+		if logW != nil && !backgroundHandedOff {
 			_ = logW.Close()
 		}
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	defer func() {
+		if !backgroundHandedOff {
+			cancel()
+		}
+	}()
 
 	shell, flag := "sh", "-c"
 	if runtime.GOOS == "windows" {
@@ -268,7 +273,56 @@ collect:
 			timer.Reset(inactivity)
 		case <-timer.C:
 			timedOut = true
-			_ = cmd.Process.Kill()
+			if pm != nil {
+				mu.Lock()
+				initial := append([]string(nil), lines...)
+				raw := strings.Join(initial, "\n")
+				mu.Unlock()
+				p := pm.Adopt(command, cwd, cmd, start, logPath, initial)
+				backgroundHandedOff = true
+				go func() {
+					for l := range lineCh {
+						p.AppendOutput(l)
+						if logW != nil {
+							fmt.Fprintln(logW, l)
+						}
+						if on != nil {
+							on(l)
+						}
+					}
+					err := <-done
+					p.MarkDone(err)
+					if logW != nil {
+						exitCode := 0
+						if err != nil {
+							if ee, ok := err.(*exec.ExitError); ok {
+								exitCode = ee.ExitCode()
+							} else {
+								exitCode = -1
+							}
+						}
+						fmt.Fprintf(logW, "\n# Exit: %d, Duration: %dms\n", exitCode, time.Since(start).Milliseconds())
+						_ = logW.Close()
+					}
+				}()
+				if len(raw) > 8000 {
+					raw = raw[len(raw)-8000:]
+				}
+				return map[string]any{
+					"output":       raw,
+					"exitCode":     -1,
+					"timedOut":     true,
+					"backgrounded": true,
+					"processId":    p.ID,
+					"logFile":      logPath,
+					"note": fmt.Sprintf(
+						"Foreground exec reached %dms of inactivity and was moved to background as #%d. Use bg_tail with id %d to inspect output and bg_kill to stop it.",
+						inactivity.Milliseconds(), p.ID, p.ID,
+					),
+				}
+			}
+			bg.TerminateTree(cmd)
+			time.AfterFunc(1500*time.Millisecond, func() { bg.KillTree(cmd) })
 			break collect
 		}
 	}

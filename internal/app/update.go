@@ -869,6 +869,9 @@ func (m *Model) handleSlashCommand(text string) (tea.Model, tea.Cmd) {
 // an old reference to this block.)
 
 func (m *Model) handleFrame(f conn.Frame) tea.Cmd {
+	if sid := frameSessionID(f.Raw); sid != "" && m.sess != "" && sid != m.sess {
+		return nil
+	}
 	switch f.Type {
 	case "capabilities":
 		// SPORE advertises supported features after the WS upgrade.
@@ -1581,6 +1584,16 @@ func (m *Model) postStreamChecks() tea.Cmd {
 		return tea.Batch(m.sendChatWithMode("[BUILD_PLAN] Build the plan from the RESEARCH_DONE block in the conversation history.", "plan"), spinnerTickCmd())
 	}
 	return nil
+}
+
+func frameSessionID(raw json.RawMessage) string {
+	var v struct {
+		SessionID string `json:"sessionId"`
+	}
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return ""
+	}
+	return v.SessionID
 }
 
 // truncateFor is a mini helper for log-line output (view.go has its own).

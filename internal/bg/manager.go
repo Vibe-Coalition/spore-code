@@ -83,14 +83,14 @@ func (m *Manager) Launch(command, cwd string) (*Process, error) {
 	_ = attachAndResume(cmd)
 
 	p := &Process{
-		ID:       id,
-		Command:  command,
-		cwd:      cwd,
-		cmd:      cmd,
-		Started:  time.Now(),
-		LogPath:  logPath,
-		Running:  true,
-		output:   list.New(),
+		ID:      id,
+		Command: command,
+		cwd:     cwd,
+		cmd:     cmd,
+		Started: time.Now(),
+		LogPath: logPath,
+		Running: true,
+		output:  list.New(),
 	}
 
 	m.mu.Lock()
@@ -127,6 +127,48 @@ func (m *Manager) Launch(command, cwd string) (*Process, error) {
 	return p, nil
 }
 
+// Adopt tracks an already-started command as a background process. This is
+// used when a foreground exec reaches its inactivity timeout but should remain
+// tail-able instead of killing the whole agent turn.
+func (m *Manager) Adopt(command, cwd string, cmd *exec.Cmd, started time.Time, logPath string, initialOutput []string) *Process {
+	id := int(atomic.AddInt32(&m.next, 1))
+	p := &Process{
+		ID:      id,
+		Command: command,
+		cwd:     cwd,
+		cmd:     cmd,
+		Started: started,
+		LogPath: logPath,
+		Running: true,
+		output:  list.New(),
+	}
+	for _, line := range initialOutput {
+		p.appendOutput(line)
+	}
+	m.mu.Lock()
+	m.procs[id] = p
+	m.mu.Unlock()
+	return p
+}
+
+// AppendOutput adds a line to the tracked tail buffer.
+func (p *Process) AppendOutput(line string) { p.appendOutput(line) }
+
+// MarkDone records process completion for adopted processes.
+func (p *Process) MarkDone(err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Running = false
+	p.Ended = time.Now()
+	if err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			p.ExitCode = ee.ExitCode()
+		} else {
+			p.ExitCode = -1
+		}
+	}
+}
+
 // Kill terminates a process by id.
 func (m *Manager) Kill(id int) bool {
 	m.mu.Lock()
@@ -138,7 +180,7 @@ func (m *Manager) Kill(id int) bool {
 	if p.cmd.Process == nil || !p.Running {
 		return false
 	}
-	_ = p.cmd.Process.Kill()
+	KillTree(p.cmd)
 	return true
 }
 

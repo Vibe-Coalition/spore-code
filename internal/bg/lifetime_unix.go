@@ -14,6 +14,7 @@ func applyChildLifetime(cmd *exec.Cmd) {
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
+	cmd.SysProcAttr.Setpgid = true
 	// Pdeathsig is Linux-specific. On other Unixes (macOS, BSD) the
 	// field doesn't exist on syscall.SysProcAttr — guarded by build tag
 	// + reflection-style assignment. Compile-time check below.
