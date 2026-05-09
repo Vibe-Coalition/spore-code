@@ -223,6 +223,7 @@ type Model struct {
 	inputBurstScheduled bool
 	inputBurstNormalize bool
 	inputAttachments    []inputAttachment
+	pastedInputs        []pastedInputSegment
 }
 
 // SetProgram stores the reference so off-thread code can deliver messages.

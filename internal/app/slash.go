@@ -226,6 +226,7 @@ func (m *Model) handleSuggestKey(km tea.KeyMsg) (tea.Cmd, bool) {
 		// so subcommand entries surface immediately if the filled value
 		// is a parent that has variants.
 		e := m.suggest.matches[m.suggest.cursor]
+		m.clearPastedInputs()
 		m.input.SetValue(e.cmd + " ")
 		m.refreshSuggest()
 		return nil, true
@@ -235,6 +236,7 @@ func (m *Model) handleSuggestKey(km tea.KeyMsg) (tea.Cmd, bool) {
 		// and fall through so updateKey's enter branch runs the slash
 		// dispatch.
 		e := m.suggest.matches[m.suggest.cursor]
+		m.clearPastedInputs()
 		m.input.SetValue(e.cmd)
 		m.suggest.visible = false
 		m.suggest.matches = nil

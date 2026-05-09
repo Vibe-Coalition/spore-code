@@ -511,6 +511,9 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	m.flushPendingInputText()
+	if m.handlePastedInputDeleteKey(msg) {
+		return m, nil
+	}
 
 	// Slash autocomplete keys take priority when the dropdown is open.
 	if _, consumed := m.handleSuggestKey(msg); consumed {
@@ -554,17 +557,20 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		// Alt+Enter / Ctrl+J insert a newline via textarea.KeyMap.InsertNewline
 		// (rebound in model.go:New). Plain 'enter' arrives here as send.
-		text := strings.TrimSpace(m.input.Value())
+		text := strings.TrimSpace(m.expandPastedInputText(m.input.Value()))
 		if text == "" {
 			m.inputAttachments = nil
+			m.clearPastedInputs()
 			return m, nil
 		}
 		if strings.HasPrefix(text, "/") {
 			m.inputAttachments = nil
+			m.clearPastedInputs()
 			return m.handleSlashCommand(text)
 		}
 		attachments := inputAttachmentsForText(text, m.inputAttachments)
 		m.inputAttachments = nil
+		m.clearPastedInputs()
 		m.input.Reset()
 		// Record the send in command history before context-prefixing.
 		// Skip identical-to-last to avoid noisy duplicates from re-sends.
@@ -649,6 +655,7 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
+	m.reconcilePastedInputs()
 	// Re-compute slash suggestions after every keystroke that reached the
 	// textarea. Cheap lookup over a ~15-item catalog.
 	m.refreshSuggest()
@@ -674,7 +681,7 @@ func (m *Model) handleHistoryNav(dir int) bool {
 	if m.histIdx == -1 {
 		// First Up press: stash the in-progress draft and jump to newest.
 		if dir < 0 {
-			m.histDraft = val
+			m.histDraft = m.expandPastedInputText(val)
 			m.histIdx = len(m.cmdHistory) - 1
 		} else {
 			// Down with no history browse in flight is a no-op so the
@@ -690,14 +697,12 @@ func (m *Model) handleHistoryNav(dir int) bool {
 		if next >= len(m.cmdHistory) {
 			// Past the newest — restore the draft.
 			m.histIdx = -1
-			m.input.SetValue(m.histDraft)
-			m.input.CursorEnd()
+			m.setInputDraftText(m.histDraft)
 			return true
 		}
 		m.histIdx = next
 	}
-	m.input.SetValue(m.cmdHistory[m.histIdx])
-	m.input.CursorEnd()
+	m.setInputDraftText(m.cmdHistory[m.histIdx])
 	return true
 }
 
@@ -847,6 +852,7 @@ func (m *Model) handleResize(w, h int) (tea.Model, tea.Cmd) {
 
 func (m *Model) handleSlashCommand(text string) (tea.Model, tea.Cmd) {
 	m.input.Reset()
+	m.clearPastedInputs()
 	parts := strings.Fields(text)
 	if len(parts) == 0 {
 		return m, nil
@@ -1039,6 +1045,7 @@ func (m *Model) handleFrame(f conn.Frame) tea.Cmd {
 			m.modal = modalNone
 			m.question = nil
 			m.input.Reset()
+			m.clearPastedInputs()
 			m.setWorkflowPhase(workflowIdle, "")
 			m.Broadcast("interactive:resolved", map[string]any{"kind": "questions"})
 			m.pushChat("system", "Question cancelled.")

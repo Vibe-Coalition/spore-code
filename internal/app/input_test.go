@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -28,6 +29,125 @@ func TestBracketedPasteInsertsImmediately(t *testing.T) {
 	}
 	if len(got.inputBurst) != 0 {
 		t.Fatalf("paste should not leave buffered input: %#v", got.inputBurst)
+	}
+}
+
+func TestLongBracketedPasteCompactsAndSendsFullText(t *testing.T) {
+	m := inputTestModel(t)
+	pasted := numberedLines(25)
+
+	next, _ := m.updateKey(tea.KeyMsg{
+		Type:  tea.KeyRunes,
+		Runes: []rune(pasted),
+		Paste: true,
+	})
+	m = next.(*Model)
+
+	if got := m.input.Value(); got != "[Pasted 25 lines]" {
+		t.Fatalf("long paste should render as placeholder, got %q", got)
+	}
+	if len(m.pastedInputs) != 1 || m.pastedInputs[0].Text != pasted {
+		t.Fatalf("long paste text was not preserved: %#v", m.pastedInputs)
+	}
+
+	next, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(*Model)
+	if got := m.input.Value(); got != "" {
+		t.Fatalf("submit should reset visible input, got %q", got)
+	}
+	if len(m.pastedInputs) != 0 {
+		t.Fatalf("submit should clear hidden paste metadata: %#v", m.pastedInputs)
+	}
+	if len(m.messages) != 1 || m.messages[0].Text != pasted {
+		t.Fatalf("sent message should show full pasted text: %#v", m.messages)
+	}
+}
+
+func TestCompactPasteExpandsWithSurroundingText(t *testing.T) {
+	m := inputTestModel(t)
+	pasted := numberedLines(25)
+
+	next, _ := m.updateKey(tea.KeyMsg{
+		Type:  tea.KeyRunes,
+		Runes: []rune("review this: "),
+	})
+	m = next.(*Model)
+	next, _ = m.Update(inputTextFlushMsg{seq: m.inputBurstSeq})
+	m = next.(*Model)
+	next, _ = m.updateKey(tea.KeyMsg{
+		Type:  tea.KeyRunes,
+		Runes: []rune(pasted),
+		Paste: true,
+	})
+	m = next.(*Model)
+
+	if got := m.input.Value(); got != "review this: [Pasted 25 lines]" {
+		t.Fatalf("surrounding text should remain visible around placeholder, got %q", got)
+	}
+	next, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(*Model)
+	want := "review this: " + pasted
+	if len(m.messages) != 1 || m.messages[0].Text != want {
+		t.Fatalf("sent message should expand compact paste with surrounding text\nwant: %q\n got: %#v", want, m.messages)
+	}
+}
+
+func TestCompactPasteBackspaceDeletesWholePaste(t *testing.T) {
+	m := inputTestModel(t)
+	pasted := numberedLines(25)
+
+	next, _ := m.updateKey(tea.KeyMsg{
+		Type:  tea.KeyRunes,
+		Runes: []rune(pasted),
+		Paste: true,
+	})
+	m = next.(*Model)
+	next, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyBackspace})
+	m = next.(*Model)
+
+	if got := m.input.Value(); got != "" {
+		t.Fatalf("backspace should delete the whole compact paste, got %q", got)
+	}
+	if len(m.pastedInputs) != 0 {
+		t.Fatalf("backspace should clear hidden paste metadata: %#v", m.pastedInputs)
+	}
+}
+
+func TestCompactPasteDeleteForwardDeletesWholePaste(t *testing.T) {
+	m := inputTestModel(t)
+	pasted := numberedLines(25)
+
+	next, _ := m.updateKey(tea.KeyMsg{
+		Type:  tea.KeyRunes,
+		Runes: []rune(pasted),
+		Paste: true,
+	})
+	m = next.(*Model)
+	m.input.CursorStart()
+	next, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyDelete})
+	m = next.(*Model)
+
+	if got := m.input.Value(); got != "" {
+		t.Fatalf("delete should delete the whole compact paste, got %q", got)
+	}
+	if len(m.pastedInputs) != 0 {
+		t.Fatalf("delete should clear hidden paste metadata: %#v", m.pastedInputs)
+	}
+}
+
+func TestHistoryRecallCompactsLongSentText(t *testing.T) {
+	m := inputTestModel(t)
+	pasted := numberedLines(25)
+	m.cmdHistory = append(m.cmdHistory, pasted)
+
+	next, _ := m.updateKey(tea.KeyMsg{Type: tea.KeyUp})
+	m = next.(*Model)
+
+	if got := m.input.Value(); got != "[Pasted 25 lines]" {
+		t.Fatalf("history recall should compact long text, got %q", got)
+	}
+	if expanded := m.expandPastedInputText(m.input.Value()); expanded != pasted {
+		t.Fatalf("history recall did not preserve full text\nwant: %q\n got: %q", pasted, expanded)
 	}
 }
 
@@ -327,6 +447,7 @@ func TestPlanFeedbackFlushesBeforeSubmit(t *testing.T) {
 func inputTestModel(t *testing.T) *Model {
 	t.Helper()
 	ta := textarea.New()
+	ta.SetWidth(80)
 	ta.Focus()
 	return &Model{
 		cfg:              &config.Config{GlobalDir: t.TempDir()},
@@ -337,6 +458,14 @@ func inputTestModel(t *testing.T) *Model {
 		histIdx:          -1,
 		followBottom:     true,
 	}
+}
+
+func numberedLines(n int) string {
+	lines := make([]string, n)
+	for i := range lines {
+		lines[i] = "line " + strconv.Itoa(i+1)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func touchFile(t *testing.T, path string) {

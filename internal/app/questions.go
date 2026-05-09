@@ -92,6 +92,7 @@ func (m *Model) openStructuredQuestion(f proto.AskUser) {
 		checked: map[int]bool{},
 	}
 	m.input.Reset()
+	m.clearPastedInputs()
 }
 
 // parseQuestionsBlock parses the QUESTIONS: marker format used by acorn's
@@ -708,6 +709,7 @@ func (m *Model) updateModal(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.planApproval = nil
 		m.permission = nil
 		m.input.Reset()
+		m.clearPastedInputs()
 		m.setWorkflowPhase(workflowIdle, "")
 		if forceStop {
 			return m.stopActiveTurn("⏹ Stopped")
@@ -759,6 +761,7 @@ func (m *Model) updateQuestionModal(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.modal = modalNone
 		m.question = nil
 		m.input.Reset()
+		m.clearPastedInputs()
 		m.setWorkflowPhase(workflowIdle, "")
 		m.Broadcast("interactive:resolved", map[string]any{"kind": "questions"})
 		if qm.source == "ask_user" {
@@ -790,6 +793,7 @@ func (m *Model) updateQuestionModal(km tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Open-ended — treat m.input contents as the answer.
 			qm.answers[qm.idx] = strings.TrimSpace(m.input.Value())
 			m.input.Reset()
+			m.clearPastedInputs()
 		} else if q.Multi {
 			var picks []string
 			for i := range q.Options {

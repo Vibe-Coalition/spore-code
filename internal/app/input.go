@@ -18,6 +18,11 @@ import (
 
 const inputBurstDelay = 12 * time.Millisecond
 
+const (
+	compactPasteMinRunes = 2000
+	compactPasteMinLines = 20
+)
+
 type inputTextFlushMsg struct {
 	seq uint64
 }
@@ -27,6 +32,19 @@ type inputAttachment struct {
 	Name      string
 	Path      string
 	MediaType string
+}
+
+type pastedInputSegment struct {
+	Placeholder string
+	Text        string
+}
+
+type pastedInputRange struct {
+	segmentIndex int
+	start        int
+	end          int
+	startByte    int
+	endByte      int
 }
 
 var fileURIRe = regexp.MustCompile(`file://[^\s"'<>]+`)
@@ -116,10 +134,269 @@ func (m *Model) insertInputText(text string) {
 		m.planApproval.feedback += text
 		return
 	}
+	if m.modal == modalNone {
+		if shouldCompactPastedInput(text) {
+			m.insertCompactPastedInput(text)
+			m.refreshSuggest()
+			return
+		}
+		m.deletePastedInputAtCursor()
+	}
 	m.input.InsertString(text)
 	if m.modal == modalNone {
+		m.reconcilePastedInputs()
 		m.refreshSuggest()
 	}
+}
+
+func shouldCompactPastedInput(text string) bool {
+	if strings.TrimSpace(text) == "" {
+		return false
+	}
+	return utf8.RuneCountInString(text) >= compactPasteMinRunes || pastedInputLineCount(text) >= compactPasteMinLines
+}
+
+func pastedInputLineCount(text string) int {
+	if text == "" {
+		return 0
+	}
+	return strings.Count(text, "\n") + 1
+}
+
+func pastedInputPlaceholder(lineCount int) string {
+	unit := "lines"
+	if lineCount == 1 {
+		unit = "line"
+	}
+	return fmt.Sprintf("[Pasted %d %s]", lineCount, unit)
+}
+
+func (m *Model) insertCompactPastedInput(text string) {
+	m.deletePastedInputAtCursor()
+	placeholder := pastedInputPlaceholder(pastedInputLineCount(text))
+	m.input.InsertString(placeholder)
+	m.pastedInputs = append(m.pastedInputs, pastedInputSegment{
+		Placeholder: placeholder,
+		Text:        text,
+	})
+}
+
+func (m *Model) setInputDraftText(text string) {
+	m.pastedInputs = nil
+	m.input.Reset()
+	if shouldCompactPastedInput(text) {
+		m.insertCompactPastedInput(text)
+	} else {
+		m.input.SetValue(text)
+	}
+	m.input.CursorEnd()
+	m.refreshSuggest()
+}
+
+func (m *Model) clearPastedInputs() {
+	m.pastedInputs = nil
+}
+
+func (m *Model) expandPastedInputText(display string) string {
+	if len(m.pastedInputs) == 0 || display == "" {
+		return display
+	}
+	var b strings.Builder
+	searchStart := 0
+	wrote := false
+	for _, segment := range m.pastedInputs {
+		if segment.Placeholder == "" {
+			continue
+		}
+		rel := strings.Index(display[searchStart:], segment.Placeholder)
+		if rel < 0 {
+			continue
+		}
+		idx := searchStart + rel
+		b.WriteString(display[searchStart:idx])
+		b.WriteString(segment.Text)
+		searchStart = idx + len(segment.Placeholder)
+		wrote = true
+	}
+	if !wrote {
+		return display
+	}
+	b.WriteString(display[searchStart:])
+	return b.String()
+}
+
+func (m *Model) handlePastedInputDeleteKey(km tea.KeyMsg) bool {
+	if len(m.pastedInputs) == 0 {
+		return false
+	}
+	backward := false
+	forward := false
+	switch km.String() {
+	case "backspace", "ctrl+h", "alt+backspace", "ctrl+w":
+		backward = true
+	case "delete", "alt+delete", "alt+d":
+		forward = true
+	default:
+		return false
+	}
+
+	display := m.input.Value()
+	cursor := m.inputCursorOffset(display)
+	for _, r := range m.pastedInputRanges(display) {
+		if (backward && cursor > r.start && cursor <= r.end) ||
+			(forward && cursor >= r.start && cursor < r.end) {
+			m.removePastedInputRange(display, r)
+			m.refreshSuggest()
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Model) deletePastedInputAtCursor() bool {
+	if len(m.pastedInputs) == 0 {
+		return false
+	}
+	display := m.input.Value()
+	cursor := m.inputCursorOffset(display)
+	for _, r := range m.pastedInputRanges(display) {
+		if cursor > r.start && cursor < r.end {
+			m.removePastedInputRange(display, r)
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Model) removePastedInputRange(display string, r pastedInputRange) {
+	if r.startByte < 0 || r.endByte > len(display) || r.startByte > r.endByte {
+		return
+	}
+	next := display[:r.startByte] + display[r.endByte:]
+	if r.segmentIndex >= 0 && r.segmentIndex < len(m.pastedInputs) {
+		m.pastedInputs = append(m.pastedInputs[:r.segmentIndex], m.pastedInputs[r.segmentIndex+1:]...)
+	}
+	m.input.SetValue(next)
+	m.setInputCursorOffset(next, r.start)
+	m.reconcilePastedInputs()
+}
+
+func (m *Model) pastedInputRanges(display string) []pastedInputRange {
+	if len(m.pastedInputs) == 0 || display == "" {
+		return nil
+	}
+	ranges := make([]pastedInputRange, 0, len(m.pastedInputs))
+	searchStart := 0
+	for i, segment := range m.pastedInputs {
+		if segment.Placeholder == "" || searchStart > len(display) {
+			continue
+		}
+		rel := strings.Index(display[searchStart:], segment.Placeholder)
+		if rel < 0 {
+			continue
+		}
+		startByte := searchStart + rel
+		endByte := startByte + len(segment.Placeholder)
+		start := utf8.RuneCountInString(display[:startByte])
+		end := start + utf8.RuneCountInString(display[startByte:endByte])
+		ranges = append(ranges, pastedInputRange{
+			segmentIndex: i,
+			start:        start,
+			end:          end,
+			startByte:    startByte,
+			endByte:      endByte,
+		})
+		searchStart = endByte
+	}
+	return ranges
+}
+
+func (m *Model) reconcilePastedInputs() {
+	if len(m.pastedInputs) == 0 {
+		return
+	}
+	display := m.input.Value()
+	next := make([]pastedInputSegment, 0, len(m.pastedInputs))
+	searchStart := 0
+	for _, segment := range m.pastedInputs {
+		if segment.Placeholder == "" || searchStart > len(display) {
+			continue
+		}
+		rel := strings.Index(display[searchStart:], segment.Placeholder)
+		if rel < 0 {
+			continue
+		}
+		next = append(next, segment)
+		searchStart += rel + len(segment.Placeholder)
+	}
+	m.pastedInputs = next
+}
+
+func (m *Model) inputCursorOffset(value string) int {
+	lines := strings.Split(value, "\n")
+	row := m.input.Line()
+	if row < 0 {
+		row = 0
+	}
+	if row >= len(lines) {
+		row = len(lines) - 1
+	}
+	col := 0
+	if row >= 0 && row < len(lines) {
+		info := m.input.LineInfo()
+		col = info.StartColumn + info.ColumnOffset
+		lineLen := utf8.RuneCountInString(lines[row])
+		if col == 0 && lineLen > 0 && m.input.Width() <= 0 {
+			col = lineLen
+		}
+		if col > lineLen {
+			col = lineLen
+		}
+	}
+	offset := 0
+	for i := 0; i < row; i++ {
+		offset += utf8.RuneCountInString(lines[i]) + 1
+	}
+	return offset + col
+}
+
+func (m *Model) setInputCursorOffset(value string, offset int) {
+	if offset < 0 {
+		offset = 0
+	}
+	row, col := inputRowColAtOffset(value, offset)
+	for m.input.Line() > row {
+		before := m.input.Line()
+		m.input.CursorUp()
+		if m.input.Line() == before {
+			break
+		}
+	}
+	for m.input.Line() < row {
+		before := m.input.Line()
+		m.input.CursorDown()
+		if m.input.Line() == before {
+			break
+		}
+	}
+	m.input.SetCursor(col)
+}
+
+func inputRowColAtOffset(value string, offset int) (int, int) {
+	row, col, pos := 0, 0, 0
+	for _, r := range value {
+		if pos >= offset {
+			break
+		}
+		if r == '\n' {
+			row++
+			col = 0
+		} else {
+			col++
+		}
+		pos++
+	}
+	return row, col
 }
 
 func (m *Model) normalizeInputText(raw string) string {
