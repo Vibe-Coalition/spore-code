@@ -2,6 +2,7 @@ package app
 
 import (
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textarea"
@@ -342,8 +343,12 @@ func themeForName(name string) Theme {
 }
 
 func themeForNameWithEnv(name string, getenv func(string) string) Theme {
+	return themeForNameWithEnvAndGOOS(name, getenv, runtime.GOOS)
+}
+
+func themeForNameWithEnvAndGOOS(name string, getenv func(string) string, goos string) Theme {
 	base := baseThemeForName(name)
-	if shouldUseCompatTheme(getenv) {
+	if shouldUseCompatThemeForOS(getenv, goos) {
 		return compatTheme(base)
 	}
 	return base
@@ -362,6 +367,10 @@ func baseThemeForName(name string) Theme {
 }
 
 func shouldUseCompatTheme(getenv func(string) string) bool {
+	return shouldUseCompatThemeForOS(getenv, runtime.GOOS)
+}
+
+func shouldUseCompatThemeForOS(getenv func(string) string, goos string) bool {
 	forced := strings.ToLower(strings.TrimSpace(getenv("SPORE_THEME_COMPAT")))
 	switch forced {
 	case "1", "true", "yes", "on":
@@ -373,6 +382,9 @@ func shouldUseCompatTheme(getenv func(string) string) bool {
 	term := strings.ToLower(strings.TrimSpace(getenv("TERM")))
 	colorTerm := strings.ToLower(strings.TrimSpace(getenv("COLORTERM")))
 
+	if goos == "windows" {
+		return false
+	}
 	if strings.Contains(colorTerm, "truecolor") || strings.Contains(colorTerm, "24bit") {
 		return false
 	}

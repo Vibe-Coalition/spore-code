@@ -57,6 +57,16 @@ func TestTruecolorTerminalKeepsRgbTheme(t *testing.T) {
 	}
 }
 
+func TestWindowsWithoutTermKeepsRgbTheme(t *testing.T) {
+	got := themeForNameWithEnvAndGOOS("dark", env(map[string]string{}), "windows")
+	if got.Compat {
+		t.Fatalf("native Windows terminal should keep RGB theme")
+	}
+	if got.Name != "dark" {
+		t.Fatalf("theme name mismatch: got %q", got.Name)
+	}
+}
+
 func TestCompatThemeOverride(t *testing.T) {
 	forcedOn := themeForNameWithEnv("light", env(map[string]string{
 		"TERM":               "xterm-256color",
@@ -73,6 +83,13 @@ func TestCompatThemeOverride(t *testing.T) {
 	}))
 	if forcedOff.Compat {
 		t.Fatalf("SPORE_THEME_COMPAT=0 should disable compat mode")
+	}
+
+	forcedOnWindows := themeForNameWithEnvAndGOOS("light", env(map[string]string{
+		"SPORE_THEME_COMPAT": "1",
+	}), "windows")
+	if !forcedOnWindows.Compat {
+		t.Fatalf("SPORE_THEME_COMPAT=1 should force compat mode on Windows")
 	}
 }
 
