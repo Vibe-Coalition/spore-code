@@ -124,6 +124,69 @@ func TestPlanControlNoFollowupIsHiddenButDrivesWorkflow(t *testing.T) {
 	}
 }
 
+func TestHiddenWorkflowControlFromChatDoneDrivesWorkflowWithoutDelta(t *testing.T) {
+	cases := []struct {
+		name       string
+		kind       string
+		text       string
+		wantSystem string
+		wantSeen   bool
+	}{
+		{
+			name:       "research done",
+			kind:       "research_done",
+			text:       "RESEARCH_DONE:\ncode_targets:\n  files_to_modify: []",
+			wantSystem: "Research complete",
+			wantSeen:   true,
+		},
+		{
+			name:       "no interview",
+			kind:       "no_interview_needed",
+			text:       "NO_INTERVIEW_NEEDED: scope is concrete",
+			wantSystem: "No interview needed",
+		},
+		{
+			name:       "no followup",
+			kind:       "no_followup_questions",
+			text:       "NO_FOLLOWUP_QUESTIONS: one clear target",
+			wantSystem: "No follow-up questions",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := &Model{currentStreamIdx: -1, planMode: true}
+			raw, err := json.Marshal(proto.ChatDone{
+				Type:                  "chat:done",
+				Text:                  tc.text,
+				HiddenWorkflowControl: tc.kind,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			cmd := m.handleFrame(conn.Frame{Type: "chat:done", Raw: raw})
+			if cmd == nil {
+				t.Fatal("expected hidden workflow control to trigger the next plan-mode command")
+			}
+			if tc.wantSeen && !m.planResearchDoneSeen {
+				t.Fatal("expected research_done metadata to mark research as seen")
+			}
+			for _, msg := range m.messages {
+				if strings.Contains(msg.Text, "RESEARCH_DONE:") || strings.Contains(msg.Text, "NO_INTERVIEW_NEEDED:") || strings.Contains(msg.Text, "NO_FOLLOWUP_QUESTIONS:") {
+					t.Fatalf("raw hidden control leaked into visible text: %#v", msg)
+				}
+				if strings.Contains(msg.PlanControlBuf, "code_targets") || strings.Contains(msg.PlanControlBuf, "scope is concrete") || strings.Contains(msg.PlanControlBuf, "one clear target") {
+					t.Fatalf("hidden control payload should be consumed before history persists it: %#v", msg)
+				}
+			}
+			if len(m.messages) == 0 || !strings.Contains(m.messages[len(m.messages)-1].Text, tc.wantSystem) {
+				t.Fatalf("expected concise workflow progress system message %q, got %#v", tc.wantSystem, m.messages)
+			}
+		})
+	}
+}
+
 func TestPlanControlHistoryFramesAreHidden(t *testing.T) {
 	m := &Model{currentStreamIdx: -1, planMode: true}
 	raw, err := json.Marshal(proto.ChatHistory{

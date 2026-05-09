@@ -750,6 +750,39 @@ func (m *Model) rememberPlanControlMarker(marker string) {
 	}
 }
 
+func markerForHiddenWorkflowControl(kind string) string {
+	switch strings.TrimSpace(kind) {
+	case "research_done":
+		return "RESEARCH_DONE:"
+	case "no_interview_needed":
+		return "NO_INTERVIEW_NEEDED:"
+	case "no_followup_questions":
+		return "NO_FOLLOWUP_QUESTIONS:"
+	default:
+		return ""
+	}
+}
+
+func (m *Model) appendHiddenWorkflowControl(kind, text string) {
+	marker := markerForHiddenWorkflowControl(kind)
+	if marker == "" {
+		return
+	}
+	buf := strings.TrimSpace(text)
+	if buf == "" || !strings.HasPrefix(strings.TrimLeft(buf, " \t\r\n"), marker) {
+		buf = marker
+	}
+	m.rememberPlanControlMarker(marker)
+	m.messages = append(m.messages, chatMsg{
+		Role:               "assistant",
+		Timestamp:          time.Now(),
+		InPlanControlBlock: true,
+		PlanControlBuf:     buf,
+	})
+	m.historyDirty = true
+	m.viewportDirty = true
+}
+
 func findLineMarkerFrom(s string, start int, markers []string) int {
 	if start < 0 {
 		start = 0

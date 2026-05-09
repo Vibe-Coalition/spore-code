@@ -915,6 +915,9 @@ func (m *Model) handleFrame(f conn.Frame) tea.Cmd {
 		var v proto.ChatDone
 		_ = json.Unmarshal(f.Raw, &v)
 		m.endStream()
+		if v.HiddenWorkflowControl != "" {
+			m.appendHiddenWorkflowControl(v.HiddenWorkflowControl, v.Text)
+		}
 		m.clearActiveTurn()
 		m.status = ""
 		if !m.planMode && m.modal == modalNone {
@@ -1608,7 +1611,7 @@ func (m *Model) postStreamChecks() tea.Cmd {
 		m.pushChat("system", "Research complete — reviewing for any follow-up questions…")
 		m.startActiveTurn("reviewing research…")
 		m.setWorkflowPhase(workflowReview, "")
-		return tea.Batch(m.sendChatWithMode("[REVIEW] Review the RESEARCH_DONE block from your previous turn and decide if any follow-up questions are needed.", "plan"), spinnerTickCmd())
+		return tea.Batch(m.sendChatWithMode("[REVIEW] Review the captured RESEARCH_DONE artifact in Runtime Workflow State and decide if any follow-up questions are needed.", "plan"), spinnerTickCmd())
 	}
 	if hasNoFollowup {
 		// ROUTER 2 decided no follow-ups → auto-fire BUILDING.
@@ -1616,7 +1619,7 @@ func (m *Model) postStreamChecks() tea.Cmd {
 		m.pushChat("system", "No follow-up questions — building the plan…")
 		m.startActiveTurn("building plan…")
 		m.setWorkflowPhase(workflowBuildPlan, "")
-		return tea.Batch(m.sendChatWithMode("[BUILD_PLAN] Build the plan from the RESEARCH_DONE block in the conversation history.", "plan"), spinnerTickCmd())
+		return tea.Batch(m.sendChatWithMode("[BUILD_PLAN] Build the plan from the captured RESEARCH_DONE artifact in Runtime Workflow State.", "plan"), spinnerTickCmd())
 	}
 	return nil
 }

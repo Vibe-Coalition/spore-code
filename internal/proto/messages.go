@@ -61,11 +61,12 @@ type ChatTool struct {
 
 // ChatDone — end of turn with usage.
 type ChatDone struct {
-	Type       string         `json:"type"`
-	Text       string         `json:"text,omitempty"`
-	Usage      *Usage         `json:"usage,omitempty"`
-	Iterations int            `json:"iterations,omitempty"`
-	ToolUsage  map[string]int `json:"toolUsage,omitempty"`
+	Type                  string         `json:"type"`
+	Text                  string         `json:"text,omitempty"`
+	HiddenWorkflowControl string         `json:"hiddenWorkflowControl,omitempty"`
+	Usage                 *Usage         `json:"usage,omitempty"`
+	Iterations            int            `json:"iterations,omitempty"`
+	ToolUsage             map[string]int `json:"toolUsage,omitempty"`
 }
 
 type Usage struct {
