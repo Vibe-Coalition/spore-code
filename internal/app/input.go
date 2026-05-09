@@ -157,7 +157,7 @@ func (m *Model) updateInputBurstCompactState() {
 		return
 	}
 	if !m.inputBurstCompact {
-		if len(m.inputBurst) < compactPasteMinRunes && m.inputBurstLines < compactPasteMinLines {
+		if !m.shouldCompactInputBurst() {
 			return
 		}
 		placeholder := pastedInputPlaceholder(m.inputBurstLines)
@@ -173,6 +173,10 @@ func (m *Model) updateInputBurstCompactState() {
 		return
 	}
 	m.replaceInputBurstCompactPlaceholder(pastedInputPlaceholder(m.inputBurstLines))
+}
+
+func (m *Model) shouldCompactInputBurst() bool {
+	return m.inputBurstLines > 1 || len(m.inputBurst) >= compactPasteMinRunes
 }
 
 func (m *Model) finalizeInputBurstCompact(text string) {

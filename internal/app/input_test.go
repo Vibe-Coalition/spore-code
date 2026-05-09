@@ -253,8 +253,11 @@ func TestStreamedMultilinePasteDoesNotSubmitEachLine(t *testing.T) {
 
 	next, _ = m.Update(inputTextFlushMsg{seq: m.inputBurstSeq})
 	m = next.(*Model)
-	if got := m.input.Value(); got != "first\nsecond\n" {
-		t.Fatalf("streamed paste was not preserved as textarea content: %q", got)
+	if got := m.input.Value(); got != "[Pasted 3 lines]" {
+		t.Fatalf("streamed paste should render as a compact placeholder: %q", got)
+	}
+	if expanded := m.expandPastedInputText(m.input.Value()); expanded != "first\nsecond\n" {
+		t.Fatalf("streamed paste full text was not preserved: %q", expanded)
 	}
 
 	next, _ = m.updateKey(tea.KeyMsg{Type: tea.KeyEnter})
