@@ -266,13 +266,37 @@ func installTempFile(tmpPath, version string) updateInstallResult {
 
 func scheduleWindowsReplacement(tmpPath, exePath string) error {
 	dir := filepath.Dir(exePath)
-	script, err := os.CreateTemp(dir, ".spore-update-*.cmd")
+	helperDir := os.TempDir()
+	if helperDir == "" {
+		helperDir = dir
+	}
+	cleanupStaleWindowsUpdateScripts(helperDir)
+	if helperDir != dir {
+		cleanupStaleWindowsUpdateScripts(dir)
+	}
+	script, err := os.CreateTemp(helperDir, "spore-update-*.cmd")
 	if err != nil {
 		return err
 	}
 	scriptPath := script.Name()
+	body := windowsReplacementScriptBody(tmpPath, exePath)
+	if _, err := script.WriteString(body); err != nil {
+		_ = script.Close()
+		_ = os.Remove(scriptPath)
+		return err
+	}
+	if err := script.Close(); err != nil {
+		_ = os.Remove(scriptPath)
+		return err
+	}
+	cmd := exec.Command("cmd", "/C", "start", "", "/MIN", scriptPath)
+	cmd.Dir = dir
+	return cmd.Start()
+}
+
+func windowsReplacementScriptBody(tmpPath, exePath string) string {
 	oldPath := exePath + ".old"
-	body := fmt.Sprintf(`@echo off
+	return fmt.Sprintf(`@echo off
 set "TMP=%s"
 set "EXE=%s"
 set "OLD=%s"
@@ -289,20 +313,23 @@ if errorlevel 1 (
   exit /b 1
 )
 del "%%OLD%%" >nul 2>nul
-del "%%~f0" >nul 2>nul
+exit /b 0
 `, tmpPath, exePath, oldPath)
-	if _, err := script.WriteString(body); err != nil {
-		_ = script.Close()
-		_ = os.Remove(scriptPath)
-		return err
+}
+
+func cleanupStaleWindowsUpdateScripts(dir string) {
+	matches, err := filepath.Glob(filepath.Join(dir, "spore-update-*.cmd"))
+	if err != nil {
+		return
 	}
-	if err := script.Close(); err != nil {
-		_ = os.Remove(scriptPath)
-		return err
+	cutoff := time.Now().Add(-24 * time.Hour)
+	for _, path := range matches {
+		info, err := os.Stat(path)
+		if err != nil || info.IsDir() || info.ModTime().After(cutoff) {
+			continue
+		}
+		_ = os.Remove(path)
 	}
-	cmd := exec.Command("cmd", "/C", "start", "", "/MIN", scriptPath)
-	cmd.Dir = dir
-	return cmd.Start()
 }
 
 func fetchLatestTag() (string, string, error) {
