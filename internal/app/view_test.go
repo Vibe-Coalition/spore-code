@@ -58,6 +58,40 @@ func TestEndStreamTrimsTrailingWhitespace(t *testing.T) {
 	}
 }
 
+func TestPlanControlResearchDoneIsHiddenButDrivesWorkflow(t *testing.T) {
+	m := &Model{currentStreamIdx: -1, planMode: true}
+
+	m.appendDelta("RESEARCH")
+	m.appendDelta("_DONE:\ncode_targets:\n  files_to_modify: []\n")
+	m.endStream()
+
+	if len(m.messages) != 1 {
+		t.Fatalf("expected hidden assistant control message to remain for post-stream checks, got %#v", m.messages)
+	}
+	if got := strings.TrimSpace(m.messages[0].Text); got != "" {
+		t.Fatalf("expected RESEARCH_DONE to be hidden from visible text, got %q", got)
+	}
+	if !strings.Contains(m.messages[0].PlanControlBuf, "RESEARCH_DONE:") {
+		t.Fatalf("expected control buffer to keep research marker, got %#v", m.messages[0])
+	}
+
+	cmd := m.postStreamChecks()
+	if cmd == nil {
+		t.Fatal("expected RESEARCH_DONE to trigger follow-up review command")
+	}
+	if !m.planResearchDoneSeen {
+		t.Fatal("expected hidden research marker to be remembered")
+	}
+	for _, msg := range m.messages {
+		if strings.Contains(msg.Text, "code_targets") || strings.Contains(msg.PlanControlBuf, "code_targets") {
+			t.Fatalf("raw research block leaked into visible/session messages: %#v", msg)
+		}
+	}
+	if len(m.messages) == 0 || !strings.Contains(m.messages[len(m.messages)-1].Text, "Research complete") {
+		t.Fatalf("expected concise system progress message, got %#v", m.messages)
+	}
+}
+
 func TestToolExecStartClosesAssistantSegment(t *testing.T) {
 	m := &Model{currentStreamIdx: -1}
 	m.appendDelta("before tool")

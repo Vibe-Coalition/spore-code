@@ -1461,13 +1461,37 @@ func truncateForLog(s string, n int) string {
 // router 2 fires AFTER research, so its answers must enter BUILDING,
 // not back into RESEARCH.
 func (m *Model) hasResearchDoneInHistory() bool {
+	if m.planResearchDoneSeen {
+		return true
+	}
 	for i := len(m.messages) - 1; i >= 0; i-- {
 		msg := m.messages[i]
-		if msg.Role == "assistant" && strings.Contains(msg.Text, "RESEARCH_DONE:") {
+		if msg.Role == "assistant" && (strings.Contains(msg.Text, "RESEARCH_DONE:") || strings.Contains(msg.PlanControlBuf, "RESEARCH_DONE:")) {
 			return true
 		}
 	}
 	return false
+}
+
+func planControlSource(msg chatMsg) string {
+	if msg.PlanControlBuf != "" {
+		return msg.PlanControlBuf
+	}
+	return msg.Text
+}
+
+func (m *Model) hidePlanControlMessage(idx int) {
+	if idx < 0 || idx >= len(m.messages) {
+		return
+	}
+	if strings.TrimSpace(m.messages[idx].Text) == "" {
+		m.messages = append(m.messages[:idx], m.messages[idx+1:]...)
+	} else {
+		m.messages[idx].PlanControlBuf = ""
+		m.messages[idx].InPlanControlBlock = false
+	}
+	m.historyDirty = true
+	m.viewportDirty = true
 }
 
 // postStreamChecks runs after chat:done to detect QUESTIONS: / PLAN_READY.
@@ -1487,23 +1511,24 @@ func (m *Model) postStreamChecks() tea.Cmd {
 	if hasPlan {
 		m.stashedPlan = last.Text
 	}
+	controlSource := planControlSource(last)
 	// RESEARCH_DONE: the pronged plan-mode RESEARCH phase emits this
 	// marker when external + codebase pre-identification are complete.
 	// Auto-fire ROUTER 2 (post-research review) by sending [REVIEW] —
 	// the agent gets one more chance to ask follow-up questions that
 	// surfaced from the research output before the plan is built.
-	hasResearch := m.planMode && strings.Contains(last.Text, "RESEARCH_DONE:") && !strings.Contains(last.Text, "PLAN_READY")
+	hasResearch := m.planMode && strings.Contains(controlSource, "RESEARCH_DONE:") && !strings.Contains(controlSource, "PLAN_READY")
 	// NO_INTERVIEW_NEEDED: ROUTER 1 stage's "skip interview" decision.
 	// Agent reviewed the request and decided no interview is required;
 	// auto-fire [RESEARCH] to enter the research+code phase. The
 	// alternative — emit a QUESTIONS: block — is handled by the
 	// parseQuestionsBlock branch above (questions.go prefixes answers
 	// with [RESEARCH] when no RESEARCH_DONE is in history yet).
-	hasNoInterview := m.planMode && strings.Contains(last.Text, "NO_INTERVIEW_NEEDED:") && !strings.Contains(last.Text, "RESEARCH_DONE:") && !strings.Contains(last.Text, "PLAN_READY")
+	hasNoInterview := m.planMode && strings.Contains(controlSource, "NO_INTERVIEW_NEEDED:") && !strings.Contains(controlSource, "RESEARCH_DONE:") && !strings.Contains(controlSource, "PLAN_READY")
 	// NO_FOLLOWUP_QUESTIONS: ROUTER 2 stage's "skip follow-up questions"
 	// decision. Research surfaced no real forks in the road; agent is
 	// ready to build. Auto-fire [BUILD_PLAN].
-	hasNoFollowup := m.planMode && strings.Contains(last.Text, "NO_FOLLOWUP_QUESTIONS:") && !strings.Contains(last.Text, "PLAN_READY")
+	hasNoFollowup := m.planMode && strings.Contains(controlSource, "NO_FOLLOWUP_QUESTIONS:") && !strings.Contains(controlSource, "PLAN_READY")
 	// If we intercepted a QUESTIONS: block during streaming, the
 	// JSON body lives on `last.QuestionsBuf` (not `last.Text`).
 	// Feed the parser from the buffer when present. On parse success
@@ -1562,6 +1587,7 @@ func (m *Model) postStreamChecks() tea.Cmd {
 	}
 	if hasNoInterview {
 		// ROUTER 1 decided no interview needed → auto-fire RESEARCH.
+		m.hidePlanControlMessage(lastIdx)
 		m.pushChat("system", "No interview needed — starting research…")
 		m.startActiveTurn("researching…")
 		m.setWorkflowPhase(workflowResearch, "")
@@ -1571,6 +1597,8 @@ func (m *Model) postStreamChecks() tea.Cmd {
 		// RESEARCH phase done. Auto-fire ROUTER 2 (post-research review)
 		// so the agent can flag any follow-up questions that surfaced
 		// from the research output before the plan is built.
+		m.planResearchDoneSeen = true
+		m.hidePlanControlMessage(lastIdx)
 		m.pushChat("system", "Research complete — reviewing for any follow-up questions…")
 		m.startActiveTurn("reviewing research…")
 		m.setWorkflowPhase(workflowReview, "")
@@ -1578,6 +1606,7 @@ func (m *Model) postStreamChecks() tea.Cmd {
 	}
 	if hasNoFollowup {
 		// ROUTER 2 decided no follow-ups → auto-fire BUILDING.
+		m.hidePlanControlMessage(lastIdx)
 		m.pushChat("system", "No follow-up questions — building the plan…")
 		m.startActiveTurn("building plan…")
 		m.setWorkflowPhase(workflowBuildPlan, "")

@@ -45,6 +45,14 @@ type chatMsg struct {
 	// nothing is silently eaten.
 	InQuestionsBlock bool
 	QuestionsBuf     string
+
+	// Plan-control streaming state. RESEARCH_DONE / NO_INTERVIEW_NEEDED /
+	// NO_FOLLOWUP_QUESTIONS are protocol frames for the CLI plan workflow,
+	// not final user-facing chat. Keep them available to postStreamChecks
+	// while preventing the raw YAML/control text from rendering as a
+	// duplicate "plan" in the transcript.
+	InPlanControlBlock bool
+	PlanControlBuf     string
 }
 
 // Model is the Bubble Tea Model.
@@ -118,6 +126,12 @@ type Model struct {
 	// our one retry. Prevents infinite loops if the agent keeps
 	// emitting broken JSON.
 	questionsRetryAttempted bool
+
+	// planResearchDoneSeen records an internal RESEARCH_DONE control
+	// frame even when that raw YAML block is hidden from the visible
+	// transcript. Router-2 question answers use this to resume into
+	// BUILDING instead of going back to RESEARCH.
+	planResearchDoneSeen bool
 
 	// sendProgramMsg is wired by main.go after tea.NewProgram so off-thread
 	// goroutines (the permissions blocking prompt) can poke the UI.
@@ -647,6 +661,11 @@ func (m *Model) appendDelta(t string) {
 		m.viewportDirty = true
 		return
 	}
+	if msg.InPlanControlBlock {
+		msg.PlanControlBuf += t
+		m.viewportDirty = true
+		return
+	}
 	// Only scan the new tail (with a small overlap to catch a marker
 	// that straddles two deltas — len("QUESTIONS:")=10 bytes is enough).
 	// Was O(N) per delta over the full accumulated text → quadratic over
@@ -667,6 +686,17 @@ func (m *Model) appendDelta(t string) {
 		msg.QuestionsBuf = combined[idx:]
 		msg.InQuestionsBlock = true
 		m.questionsScanOff = 0
+	} else if m.planMode {
+		if idx := findPlanControlMarkerFrom(combined, scanStart); idx >= 0 {
+			msg.Text = strings.TrimRight(combined[:idx], " \t")
+			msg.Text = strings.TrimRight(msg.Text, "\n")
+			msg.PlanControlBuf = combined[idx:]
+			msg.InPlanControlBlock = true
+			m.questionsScanOff = 0
+		} else {
+			msg.Text += t
+			m.questionsScanOff = len(msg.Text)
+		}
 	} else {
 		msg.Text += t
 		m.questionsScanOff = len(msg.Text)
@@ -682,31 +712,56 @@ func (m *Model) appendDelta(t string) {
 // offset lets streaming callers re-scan only new bytes plus a small
 // overlap window — avoids the O(N²) per-delta full re-scan.
 func findQuestionsMarkerFrom(s string, start int) int {
-	const marker = "QUESTIONS:"
+	return findLineMarkerFrom(s, start, []string{"QUESTIONS:"})
+}
+
+// findPlanControlMarkerFrom scans for internal plan-mode protocol
+// markers. These are consumed by the CLI state machine and should not
+// render as ordinary assistant prose.
+func findPlanControlMarkerFrom(s string, start int) int {
+	return findLineMarkerFrom(s, start, []string{
+		"RESEARCH_DONE:",
+		"NO_INTERVIEW_NEEDED:",
+		"NO_FOLLOWUP_QUESTIONS:",
+	})
+}
+
+func findLineMarkerFrom(s string, start int, markers []string) int {
 	if start < 0 {
 		start = 0
 	}
-	for {
-		i := strings.Index(s[start:], marker)
-		if i < 0 {
-			return -1
-		}
-		abs := start + i
-		if abs == 0 {
-			return abs
-		}
-		j := abs - 1
-		for j >= 0 && (s[j] == ' ' || s[j] == '\t') {
-			j--
-		}
-		if j < 0 || s[j] == '\n' {
-			return abs
-		}
-		start = abs + len(marker)
-		if start >= len(s) {
-			return -1
+	best := -1
+	for _, marker := range markers {
+		pos := start
+		for {
+			i := strings.Index(s[pos:], marker)
+			if i < 0 {
+				break
+			}
+			abs := pos + i
+			if abs == 0 {
+				if best < 0 || abs < best {
+					best = abs
+				}
+				break
+			}
+			j := abs - 1
+			for j >= 0 && (s[j] == ' ' || s[j] == '\t') {
+				j--
+			}
+			if j < 0 || s[j] == '\n' {
+				if best < 0 || abs < best {
+					best = abs
+				}
+				break
+			}
+			pos = abs + len(marker)
+			if pos >= len(s) {
+				break
+			}
 		}
 	}
+	return best
 }
 
 func (m *Model) endStream() {
@@ -724,13 +779,13 @@ func (m *Model) endStream() {
 		// the entire response into QuestionsBuf, leaving Text empty.
 		// Dropping here would erase the buffer that postStreamChecks
 		// needs to parse, so the questions modal never opens.
-		if text == "" && msg.QuestionsBuf == "" {
+		if text == "" && msg.QuestionsBuf == "" && msg.PlanControlBuf == "" {
 			idx := m.currentStreamIdx
 			m.messages = append(m.messages[:idx], m.messages[idx+1:]...)
 		} else {
 			msg.Text = text
 			msg.Streaming = false
-			if m.writer != nil {
+			if m.writer != nil && text != "" {
 				m.writer.WriteAssistant(text, nil, 0)
 			}
 		}
