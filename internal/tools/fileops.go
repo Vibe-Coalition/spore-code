@@ -331,7 +331,7 @@ func EditFile(input map[string]any, cwd, scope string) any {
 			return map[string]string{"error": matchErr}
 		}
 		if !ok {
-			return map[string]string{"error": "old_string not found in " + p + " (exact and newline-normalized matching both failed; read_file output normalizes CRLF to LF, so re-read a narrow range or use patch_file for structural edits)"}
+			return map[string]string{"error": "old_string not found in " + p + " (exact and newline-normalized matching both failed; the target text is likely stale or absent, not just a line-ending mismatch. Re-read a narrow range and copy the current text exactly, or use patch_file for structural edits)"}
 		}
 		if err := os.WriteFile(p, []byte(updated), 0o644); err != nil {
 			return map[string]string{"error": err.Error()}

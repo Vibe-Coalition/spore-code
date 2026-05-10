@@ -194,6 +194,30 @@ func TestEditFileReportsNormalizedDuplicateMatches(t *testing.T) {
 	}
 }
 
+func TestEditFileMissingStringErrorReportsStaleTarget(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "missing.txt")
+	if err := os.WriteFile(path, []byte("alpha\r\nbeta\r\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	result := EditFile(map[string]any{
+		"path":       path,
+		"old_string": "gamma\n",
+		"new_string": "GAMMA\n",
+	}, dir, "expanded")
+	m, ok := result.(map[string]string)
+	if !ok {
+		t.Fatalf("expected error map, got %T: %+v", result, result)
+	}
+	if !strings.Contains(m["error"], "target text is likely stale or absent") {
+		t.Fatalf("expected stale/absent hint, got: %q", m["error"])
+	}
+	if strings.Contains(strings.ToLower(m["error"]), "crlf") {
+		t.Fatalf("missing-string error should not blame CRLF: %q", m["error"])
+	}
+}
+
 func TestEditFileReplaceAllNormalizedCRLF(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "all.txt")
