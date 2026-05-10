@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Vibe-Coalition/spore-code/internal/bg"
+	"github.com/Vibe-Coalition/spore-code/internal/shellcmd"
 )
 
 // dangerousPatterns — exact substrings we refuse to run. Mirror
@@ -191,11 +192,7 @@ func Exec(input map[string]any, cwd string, logDir string, pm *bg.Manager, on fu
 		}
 	}()
 
-	shell, flag := "sh", "-c"
-	if runtime.GOOS == "windows" {
-		shell, flag = "cmd", "/C"
-	}
-	cmd := exec.CommandContext(ctx, shell, flag, command)
+	cmd := shellcmd.New(ctx, command)
 	cmd.Dir = cwd
 	// Tie child to acorn's lifetime so a kill -9 on us also kills exec
 	// children (Linux PDEATHSIG / Windows JobObject).

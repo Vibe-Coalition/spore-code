@@ -5,15 +5,17 @@ package bg
 import (
 	"bufio"
 	"container/list"
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Vibe-Coalition/spore-code/internal/shellcmd"
 )
 
 // Process is a single tracked background subprocess.
@@ -53,11 +55,7 @@ func New(logDir string) *Manager {
 // The caller can later use ID for /bg read and /bg kill.
 func (m *Manager) Launch(command, cwd string) (*Process, error) {
 	id := int(atomic.AddInt32(&m.next, 1))
-	shell, flag := "sh", "-c"
-	if runtime.GOOS == "windows" {
-		shell, flag = "cmd", "/C"
-	}
-	cmd := exec.Command(shell, flag, command)
+	cmd := shellcmd.New(context.Background(), command)
 	cmd.Dir = cwd
 	// Tie the child's lifetime to ours — Linux PDEATHSIG / Windows
 	// JobObject KillOnJobClose. So a kill -9 on acorn doesn't leak
