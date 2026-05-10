@@ -41,14 +41,21 @@ func BuildProjectContextWithScope(cwd, mode, scope string) proto.ProjectContext 
 		project = filepath.Base(gitRoot)
 		root = gitRoot
 	}
+	defaultShell, shellFlag, shellFamily, pathSeparator, pathListSeparator, availableShells := detectShellContext()
 	pc := proto.ProjectContext{
-		Cwd:        cwd,
-		Project:    project,
-		Mode:       mode,
-		Scope:      scope,
-		OS:         runtime.GOOS,
-		Arch:       runtime.GOARCH,
-		LocalTools: localtools.LocalToolNames(),
+		Cwd:               cwd,
+		Project:           project,
+		Mode:              mode,
+		Scope:             scope,
+		OS:                runtime.GOOS,
+		Arch:              runtime.GOARCH,
+		DefaultShell:      defaultShell,
+		ShellFlag:         shellFlag,
+		ShellFamily:       shellFamily,
+		PathSeparator:     pathSeparator,
+		PathListSeparator: pathListSeparator,
+		AvailableShells:   availableShells,
+		LocalTools:        localtools.LocalToolNames(),
 	}
 	if gitRoot != "" {
 		pc.GitBranch = gitBranch(cwd)
@@ -88,6 +95,37 @@ func BuildProjectContextWithScope(cwd, mode, scope string) proto.ProjectContext 
 	}
 	pc.ToolGuidance = codeLookupToolGuidance(hasIndex)
 	return pc
+}
+
+func detectShellContext() (defaultShell, shellFlag, shellFamily, pathSeparator, pathListSeparator string, availableShells []string) {
+	pathSeparator = string(os.PathSeparator)
+	pathListSeparator = string(os.PathListSeparator)
+	if runtime.GOOS == "windows" {
+		defaultShell, shellFlag, shellFamily = "cmd.exe", "/C", "cmd"
+		availableShells = detectAvailableShells([]string{"cmd.exe", "powershell.exe", "pwsh.exe", "bash.exe"})
+	} else {
+		defaultShell, shellFlag, shellFamily = "sh", "-c", "sh"
+		availableShells = detectAvailableShells([]string{"sh", "bash", "zsh", "fish"})
+	}
+	if len(availableShells) == 0 {
+		availableShells = []string{defaultShell}
+	}
+	return
+}
+
+func detectAvailableShells(candidates []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(candidates))
+	for _, name := range candidates {
+		if name == "" || seen[name] {
+			continue
+		}
+		if _, err := exec.LookPath(name); err == nil {
+			seen[name] = true
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 func codeLookupToolGuidance(hasIndex bool) []string {

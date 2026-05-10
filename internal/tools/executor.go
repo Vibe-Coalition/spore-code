@@ -33,12 +33,13 @@ var serverTools = map[string]bool{
 
 // Local tools we implement.
 var localTools = map[string]bool{
-	"exec":       true,
-	"read_file":  true,
-	"write_file": true,
-	"edit_file":  true,
-	"glob":       true,
-	"grep":       true,
+	"exec":            true,
+	"powershell_exec": true,
+	"read_file":       true,
+	"write_file":      true,
+	"edit_file":       true,
+	"glob":            true,
+	"grep":            true,
 
 	// codeindex (M1): structural code search backed by a per-project
 	// SQLite index at <cwd>/.spore-code/index.db. See internal/codeindex/.
@@ -77,6 +78,9 @@ var localTools = map[string]bool{
 func LocalToolNames() []string {
 	names := make([]string, 0, len(localTools))
 	for name := range localTools {
+		if name == "powershell_exec" && !PowerShellAvailable() {
+			continue
+		}
 		names = append(names, name)
 	}
 	sort.Strings(names)
@@ -234,6 +238,8 @@ func (e *Executor) Execute(name string, inputRaw json.RawMessage) (result any, c
 		return Grep(input, e.CWD), true
 	case "exec":
 		return Exec(input, e.CWD, e.LogDir, e.BG, e.Hooks.OnExecLine), true
+	case "powershell_exec":
+		return PowerShellExec(input, e.CWD, e.LogDir), true
 	case "list_dir":
 		return ListDir(input, e.CWD, e.Scope), true
 	case "read_many_files":

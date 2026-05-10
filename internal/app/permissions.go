@@ -56,8 +56,11 @@ func compileAll(ps []string) []*regexp.Regexp {
 
 // IsDangerous checks whether a tool call matches dangerous patterns.
 func IsDangerous(name string, input map[string]any) bool {
-	if name == "exec" {
+	if name == "exec" || name == "powershell_exec" {
 		cmd, _ := input["command"].(string)
+		if cmd == "" {
+			cmd, _ = input["script"].(string)
+		}
 		for _, r := range dangerousPatternsRe {
 			if r.FindStringIndex(cmd) != nil {
 				return true
@@ -82,8 +85,11 @@ func IsDangerous(name string, input map[string]any) bool {
 // Summarize gives a one-line human label for a tool call.
 func Summarize(name string, input map[string]any) string {
 	switch name {
-	case "exec":
+	case "exec", "powershell_exec":
 		c, _ := input["command"].(string)
+		if c == "" {
+			c, _ = input["script"].(string)
+		}
 		return truncateCells(c, 120)
 	case "write_file", "edit_file", "read_file", "list_dir", "git_status", "git_diff", "patch_file", "run_tests":
 		p, _ := input["path"].(string)
@@ -105,8 +111,11 @@ func Summarize(name string, input map[string]any) string {
 // MakeRule derives a session allow-rule from a tool call. Mirrors Python.
 func MakeRule(name string, input map[string]any) string {
 	switch name {
-	case "exec":
+	case "exec", "powershell_exec":
 		cmd, _ := input["command"].(string)
+		if cmd == "" {
+			cmd, _ = input["script"].(string)
+		}
 		cmd = strings.TrimSpace(cmd)
 		parts := strings.Fields(cmd)
 		first := ""
@@ -117,9 +126,9 @@ func MakeRule(name string, input map[string]any) string {
 			}
 		}
 		if first == "" {
-			return "exec:*"
+			return name + ":*"
 		}
-		return "exec:" + first + "*"
+		return name + ":" + first + "*"
 	case "write_file", "edit_file", "patch_file":
 		p, _ := input["path"].(string)
 		if i := strings.LastIndex(p, "/"); i >= 0 {
@@ -154,8 +163,11 @@ func MatchesRule(rule, name string, input map[string]any) bool {
 		return true
 	}
 	switch name {
-	case "exec":
+	case "exec", "powershell_exec":
 		cmd, _ := input["command"].(string)
+		if cmd == "" {
+			cmd, _ = input["script"].(string)
+		}
 		cmd = strings.TrimSpace(cmd)
 		if strings.HasSuffix(pat, "*") {
 			prefix := strings.TrimSuffix(pat, "*")

@@ -128,7 +128,7 @@ func TestExecutorCodeIndexFlow(t *testing.T) {
 	}
 
 	// 5. get_snippet by file + line_range alias
-	in3c, _ := json.Marshal(map[string]any{"file": "internal/tools/executor.go", "line_range": []any{160, 165}})
+	in3c, _ := json.Marshal(map[string]any{"file": "internal/tools/executor.go", "line_range": []any{167, 172}})
 	r3c, _ := exe.Execute("get_snippet", in3c)
 	m3c, _ := r3c.(map[string]any)
 	if m3c["ok"] != true {

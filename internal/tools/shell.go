@@ -376,6 +376,128 @@ collect:
 	return result
 }
 
+func PowerShellAvailable() bool {
+	_, ok := findPowerShellExecutable("")
+	return ok
+}
+
+func findPowerShellExecutable(preferred string) (string, bool) {
+	candidates := []string{}
+	if preferred != "" {
+		candidates = append(candidates, preferred)
+	}
+	if runtime.GOOS == "windows" {
+		candidates = append(candidates, "pwsh.exe", "powershell.exe", "pwsh", "powershell")
+	} else {
+		candidates = append(candidates, "pwsh", "powershell")
+	}
+	seen := map[string]bool{}
+	for _, name := range candidates {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		if p, err := exec.LookPath(name); err == nil {
+			return p, true
+		}
+	}
+	return "", false
+}
+
+// PowerShellExec runs PowerShell directly, bypassing the cmd.exe /C wrapper
+// used by exec on Windows. That preserves pipes, quotes, and script blocks.
+func PowerShellExec(input map[string]any, cwd string, logDir string) any {
+	command := asString(input["command"], "")
+	if command == "" {
+		command = asString(input["script"], "")
+	}
+	if command == "" {
+		return map[string]string{"error": "command is required"}
+	}
+	for _, p := range dangerousPatterns {
+		if strings.Contains(command, p) {
+			return map[string]string{"error": "Blocked dangerous command pattern: " + p}
+		}
+	}
+	if err := checkPathSafety(command); err != "" {
+		return map[string]string{"error": err}
+	}
+	exe, ok := findPowerShellExecutable(asString(input["executable"], ""))
+	if !ok {
+		return map[string]string{"error": "PowerShell executable not found on PATH (checked pwsh and powershell)"}
+	}
+
+	timeoutMs := asInt(input["timeout"], 120000)
+	if timeoutMs <= 0 {
+		timeoutMs = 120000
+	}
+	if timeoutMs > 600000 {
+		timeoutMs = 600000
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMs)*time.Millisecond)
+	defer cancel()
+
+	args := []string{"-NoProfile", "-Command", command}
+	base := strings.ToLower(filepath.Base(exe))
+	if strings.HasPrefix(base, "powershell") {
+		args = []string{"-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command}
+	}
+	cmd := exec.CommandContext(ctx, exe, args...)
+	cmd.Dir = cwd
+	bg.ApplyChildLifetime(cmd)
+
+	var logPath string
+	start := time.Now()
+	out, err := cmd.CombinedOutput()
+	duration := time.Since(start).Milliseconds()
+	output := string(out)
+
+	if logDir != "" {
+		if mkErr := os.MkdirAll(logDir, 0o755); mkErr == nil {
+			logPath = filepath.Join(logDir, fmt.Sprintf("powershell-%s.log", time.Now().Format("20060102-150405")))
+			_ = os.WriteFile(logPath, []byte(fmt.Sprintf("# Command: %s\n# Time: %s\n# Executable: %s\n\n%s\n", command, time.Now().Format(time.RFC3339), exe, output)), 0o644)
+		}
+	}
+
+	exitCode := 0
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return map[string]any{
+				"error":    fmt.Sprintf("PowerShell command timed out after %dms", timeoutMs),
+				"output":   output,
+				"exitCode": -1,
+				"logFile":  logPath,
+			}
+		}
+		if ee, ok := err.(*exec.ExitError); ok {
+			exitCode = ee.ExitCode()
+		} else {
+			exitCode = -1
+		}
+	}
+
+	truncated := false
+	if len(output) > 8000 {
+		mid := len(output) - 8000
+		output = output[:4000] + fmt.Sprintf("\n\n[... %d chars truncated ...]\n\n", mid) + output[len(output)-4000:]
+		truncated = true
+	}
+	result := map[string]any{
+		"output":     strings.TrimRight(output, "\r\n"),
+		"exitCode":   exitCode,
+		"executable": exe,
+		"durationMs": duration,
+	}
+	if logPath != "" {
+		result["logFile"] = logPath
+	}
+	if truncated && logPath != "" {
+		result["note"] = fmt.Sprintf("Output truncated. Full output: %s", logPath)
+	}
+	return result
+}
+
 func isServerLike(cmd string) bool {
 	for _, h := range backgroundHints {
 		if strings.Contains(cmd, h) {
