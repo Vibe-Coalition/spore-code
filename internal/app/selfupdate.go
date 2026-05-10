@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -292,7 +291,7 @@ func scheduleWindowsReplacement(tmpPath, exePath string) error {
 	}
 	cmd := exec.Command("cmd", "/C", scriptPath)
 	cmd.Dir = dir
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	hideCommandWindow(cmd)
 	return cmd.Start()
 }
 
