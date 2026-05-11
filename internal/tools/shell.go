@@ -112,7 +112,7 @@ func checkPathSafety(cmd string) string {
 // on: optional per-line output callback (used by the UI to stream exec
 // output live during the call).
 func Exec(input map[string]any, cwd string, logDir string, pm *bg.Manager, on func(line string)) any {
-	command := asString(input["command"], "")
+	command := firstPresentString(input, "command", "cmd", "shell_command", "shellCommand")
 	if command == "" {
 		return map[string]string{"error": "command is required"}
 	}
@@ -310,10 +310,12 @@ collect:
 					"exitCode":     -1,
 					"timedOut":     true,
 					"backgrounded": true,
+					"pending":      true,
+					"running":      true,
 					"processId":    p.ID,
 					"logFile":      logPath,
 					"note": fmt.Sprintf(
-						"Foreground exec reached %dms of inactivity and was moved to background as #%d. Use bg_tail with id %d to inspect output and bg_kill to stop it.",
+						"Foreground exec reached %dms of inactivity and was moved to background as #%d. This is pending, not failed. Use bg_tail with id %d to inspect output and bg_kill to stop it.",
 						inactivity.Milliseconds(), p.ID, p.ID,
 					),
 				}

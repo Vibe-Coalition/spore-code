@@ -53,6 +53,17 @@ func TestReadFile_StartEndLineAliases(t *testing.T) {
 	}
 }
 
+func TestReadFile_LineStartEndAliases(t *testing.T) {
+	path, cwd := writeNLines(t, 100)
+	r := ReadFile(map[string]any{"file_path": path, "line_start": 11, "line_end": 15}, cwd, "expanded")
+	m := r.(map[string]any)
+	got := m["content"].(string)
+	want := "11\tline 11\n12\tline 12\n13\tline 13\n14\tline 14\n15\tline 15\n"
+	if got != want {
+		t.Errorf("content mismatch\nwant: %q\ngot:  %q", want, got)
+	}
+}
+
 func TestReadFile_LineRangeCompact(t *testing.T) {
 	path, cwd := writeNLines(t, 100)
 	r := ReadFile(map[string]any{"path": path, "line_range": "L11-L13", "compact": true}, cwd, "expanded")
@@ -170,6 +181,81 @@ func TestEditFileMatchesReadFileStyleSnippetInCRLFFile(t *testing.T) {
 	want := "alpha\r\nBETA\r\nGAMMA\r\n"
 	if string(got) != want {
 		t.Fatalf("file mismatch\nwant: %q\ngot:  %q", want, string(got))
+	}
+}
+
+func TestEditFileAcceptsBlobAliases(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "aliases.txt")
+	if err := os.WriteFile(path, []byte("alpha\nbeta\ngamma\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	result := EditFile(map[string]any{
+		"path":     path,
+		"old_blob": "beta\n",
+		"new_blob": "BETA\n",
+	}, dir, "expanded")
+	m, ok := result.(map[string]any)
+	if !ok || m["ok"] != true {
+		t.Fatalf("expected ok result, got %T: %+v", result, result)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	want := "alpha\nBETA\ngamma\n"
+	if string(got) != want {
+		t.Fatalf("file mismatch\nwant: %q\ngot:  %q", want, string(got))
+	}
+}
+
+func TestEditFileAcceptsStrAliases(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "str-aliases.txt")
+	if err := os.WriteFile(path, []byte("alpha\nbeta\ngamma\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	result := EditFile(map[string]any{
+		"file":    path,
+		"old_str": "beta\n",
+		"new_str": "BETA\n",
+	}, dir, "expanded")
+	m, ok := result.(map[string]any)
+	if !ok || m["ok"] != true {
+		t.Fatalf("expected ok result, got %T: %+v", result, result)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	want := "alpha\nBETA\ngamma\n"
+	if string(got) != want {
+		t.Fatalf("file mismatch\nwant: %q\ngot:  %q", want, string(got))
+	}
+}
+
+func TestWriteFileAcceptsTextAliasAndRejectsMissingContent(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "new.txt")
+	result := WriteFile(map[string]any{"file_path": path, "text": "hello\n"}, dir, "expanded")
+	m, ok := result.(map[string]any)
+	if !ok || m["ok"] != true {
+		t.Fatalf("expected ok result, got %T: %+v", result, result)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if string(got) != "hello\n" {
+		t.Fatalf("file mismatch: %q", string(got))
+	}
+
+	missing := WriteFile(map[string]any{"path": filepath.Join(dir, "empty.txt")}, dir, "expanded")
+	errMap, ok := missing.(map[string]string)
+	if !ok || !strings.Contains(errMap["error"], "content is required") {
+		t.Fatalf("expected missing content error, got %T: %+v", missing, missing)
 	}
 }
 

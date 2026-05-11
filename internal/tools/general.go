@@ -14,7 +14,10 @@ import (
 )
 
 func resolveDir(input map[string]any, cwd, scope string) (string, error) {
-	raw := asString(input["path"], cwd)
+	raw := firstPresentString(input, "path", "dir", "directory", "folder", "cwd")
+	if raw == "" {
+		raw = cwd
+	}
 	p, err := ResolvePathScoped(raw, cwd, scope)
 	if err != nil {
 		return "", err
@@ -94,7 +97,7 @@ func ListDir(input map[string]any, cwd, scope string) any {
 }
 
 func ReadManyFiles(input map[string]any, cwd, scope string) any {
-	paths := asStringSlice(input["paths"])
+	paths := asStringSlice(firstDefined(input, "paths", "files", "file_paths", "filePaths"))
 	if len(paths) == 0 {
 		return map[string]string{"error": "paths is required"}
 	}
@@ -103,8 +106,13 @@ func ReadManyFiles(input map[string]any, cwd, scope string) any {
 		paths = paths[:20]
 		truncated = true
 	}
-	limit := asInt(input["limit"], 400)
-	offset := asInt(input["offset"], 0)
+	offset, limit := 0, 400
+	if firstDefined(input, "offset", "limit", "start_line", "startLine", "line_start", "lineStart", "from_line", "fromLine", "end_line", "endLine", "line_end", "lineEnd", "to_line", "toLine", "line_range", "lineRange", "range") != nil {
+		offset, limit, _ = readFileOptions(input)
+		if limit <= 0 {
+			limit = 400
+		}
+	}
 	files := make([]map[string]any, 0, len(paths))
 	for _, p := range paths {
 		files = append(files, map[string]any{
@@ -182,7 +190,7 @@ func GitDiff(input map[string]any, cwd, scope string) any {
 	if ref := asString(input["ref"], ""); ref != "" {
 		args = append(args, ref)
 	}
-	if file := asString(input["file"], ""); file != "" {
+	if file := firstPresentString(input, "file", "filepath", "file_path", "filePath"); file != "" {
 		args = append(args, "--", file)
 	}
 	out, exit, err := runCmdArgs(dir, 60000, "git", args...)
@@ -232,7 +240,7 @@ func patchPaths(diff string) ([]string, error) {
 }
 
 func PatchFile(input map[string]any, cwd, scope string) any {
-	diff := asString(input["patch"], asString(input["diff"], ""))
+	diff := firstPresentString(input, "patch", "diff", "unified_diff", "unifiedDiff")
 	if strings.TrimSpace(diff) == "" {
 		return map[string]string{"error": "patch is required"}
 	}
@@ -308,7 +316,7 @@ func RunTests(input map[string]any, cwd, logDir string, pm *bg.Manager, on func(
 	if err != nil {
 		return map[string]string{"error": err.Error()}
 	}
-	command := asString(input["command"], "")
+	command := firstPresentString(input, "command", "cmd", "shell_command", "shellCommand")
 	if command == "" {
 		command = detectTestCommand(dir)
 	}
@@ -351,7 +359,7 @@ func BgTail(input map[string]any, pm *bg.Manager) any {
 	if pm == nil {
 		return map[string]string{"error": "background manager unavailable"}
 	}
-	id := asInt(input["id"], 0)
+	id := asInt(firstDefined(input, "id", "processId", "process_id", "jobId", "job_id", "bgId", "bg_id"), 0)
 	p := pm.Get(id)
 	if p == nil {
 		return map[string]string{"error": fmt.Sprintf("background process #%d not found", id)}
@@ -367,14 +375,14 @@ func BgTail(input map[string]any, pm *bg.Manager) any {
 	if len(lines) > n {
 		lines = lines[len(lines)-n:]
 	}
-	return map[string]any{"ok": true, "id": id, "running": p.Running, "exitCode": p.ExitCode, "logFile": p.LogPath, "output": strings.Join(lines, "\n")}
+	return map[string]any{"ok": true, "id": id, "command": p.Command, "running": p.Running, "exitCode": p.ExitCode, "logFile": p.LogPath, "output": strings.Join(lines, "\n")}
 }
 
 func BgKill(input map[string]any, pm *bg.Manager) any {
 	if pm == nil {
 		return map[string]string{"error": "background manager unavailable"}
 	}
-	id := asInt(input["id"], 0)
+	id := asInt(firstDefined(input, "id", "processId", "process_id", "jobId", "job_id", "bgId", "bg_id"), 0)
 	if id <= 0 {
 		return map[string]string{"error": "id is required"}
 	}

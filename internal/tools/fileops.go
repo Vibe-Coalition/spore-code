@@ -82,7 +82,7 @@ const MaxReadFileBytes int64 = 100 * 1024 * 1024 // 100 MB
 //	offset >= 0      — start at line `offset` (0-based)
 //	offset < 0       — "last |offset| lines" (tail mode, ring-buffered)
 func ReadFile(input map[string]any, cwd, scope string) any {
-	pathRaw, _ := input["path"].(string)
+	pathRaw := firstPresentString(input, "path", "file", "file_path", "filePath", "filename")
 	p, err := ResolvePathScoped(pathRaw, cwd, scope)
 	if err != nil {
 		return map[string]string{"error": err.Error()}
@@ -207,8 +207,8 @@ func lineRangeFromInput(input map[string]any) (start, end int, ok bool) {
 			return s, e, true
 		}
 	}
-	start, hasStart := firstInt(input, "start_line", "startLine", "line")
-	end, hasEnd := firstInt(input, "end_line", "endLine")
+	start, hasStart := firstInt(input, "start_line", "startLine", "line_start", "lineStart", "from_line", "fromLine", "line")
+	end, hasEnd := firstInt(input, "end_line", "endLine", "line_end", "lineEnd", "to_line", "toLine")
 	if hasStart || hasEnd {
 		if !hasStart {
 			start = end
@@ -277,6 +277,15 @@ func firstInt(input map[string]any, keys ...string) (int, bool) {
 	return 0, false
 }
 
+func firstDefined(input map[string]any, keys ...string) any {
+	for _, key := range keys {
+		if v, ok := input[key]; ok && v != nil {
+			return v
+		}
+	}
+	return nil
+}
+
 func writeReadFileLine(b *strings.Builder, lineNo int, line string, includeLineNumbers bool) {
 	if includeLineNumbers {
 		fmt.Fprintf(b, "%d\t%s\n", lineNo, line)
@@ -288,8 +297,11 @@ func writeReadFileLine(b *strings.Builder, lineNo int, line string, includeLineN
 
 // WriteFile implements the write_file tool. Input: path, content.
 func WriteFile(input map[string]any, cwd, scope string) any {
-	pathRaw, _ := input["path"].(string)
-	content, _ := input["content"].(string)
+	pathRaw := firstPresentString(input, "path", "file", "file_path", "filePath", "filename")
+	content, hasContent := firstPresentStringOK(input, "content", "text", "contents", "body", "data")
+	if !hasContent {
+		return map[string]string{"error": "content is required for write_file (text, contents, body, and data are accepted aliases; use content:\"\" only when intentionally writing an empty file)"}
+	}
 	p, err := ResolvePathScoped(pathRaw, cwd, scope)
 	if err != nil {
 		return map[string]string{"error": err.Error()}
@@ -305,9 +317,9 @@ func WriteFile(input map[string]any, cwd, scope string) any {
 }
 
 // EditFile implements the edit_file tool. Input: path, old_string (or
-// old_text), new_string (or new_text), replace_all?.
+// old_text/old_blob), new_string (or new_text/new_blob), replace_all?.
 func EditFile(input map[string]any, cwd, scope string) any {
-	pathRaw, _ := input["path"].(string)
+	pathRaw := firstPresentString(input, "path", "file", "file_path", "filePath", "filename")
 	p, err := ResolvePathScoped(pathRaw, cwd, scope)
 	if err != nil {
 		return map[string]string{"error": err.Error()}
@@ -316,11 +328,14 @@ func EditFile(input map[string]any, cwd, scope string) any {
 	if err != nil {
 		return map[string]string{"error": err.Error()}
 	}
-	old := asString(input["old_string"], asString(input["old_text"], ""))
-	replacement := asString(input["new_string"], asString(input["new_text"], ""))
-	replaceAll := asBool(input["replace_all"], asBool(input["all"], false))
+	old := firstPresentString(input, "old_string", "old_text", "oldString", "old_blob", "oldBlob", "old_str", "oldStr", "old", "find", "search")
+	replacement, hasReplacement := firstPresentStringOK(input, "new_string", "new_text", "newString", "new_blob", "newBlob", "new_str", "newStr", "new", "replace", "replacement")
+	replaceAll := asBool(input["replace_all"], asBool(input["replaceAll"], asBool(input["all"], false)))
 	if old == "" {
-		return map[string]string{"error": "old_string is required"}
+		return map[string]string{"error": "old_text is required for edit_file (old_string, old_blob, and old_str are accepted aliases)"}
+	}
+	if !hasReplacement {
+		return map[string]string{"error": "new_text is required for edit_file (new_string, new_blob, and new_str are accepted aliases; use an empty string to delete text)"}
 	}
 
 	text := string(data)
@@ -475,6 +490,18 @@ func firstString(input map[string]any, keys ...string) string {
 		}
 	}
 	return ""
+}
+func firstPresentString(input map[string]any, keys ...string) string {
+	s, _ := firstPresentStringOK(input, keys...)
+	return s
+}
+func firstPresentStringOK(input map[string]any, keys ...string) (string, bool) {
+	for _, key := range keys {
+		if v, ok := input[key]; ok {
+			return asString(v, ""), true
+		}
+	}
+	return "", false
 }
 func asBool(v any, d bool) bool {
 	if b, ok := v.(bool); ok {

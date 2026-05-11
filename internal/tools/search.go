@@ -16,10 +16,11 @@ import (
 // pattern containing `/` would never match a real path).
 //
 // Translation rules:
-//   `**`  → `.*`           (zero or more chars, including `/`)
-//   `*`   → `[^/]*`         (zero or more non-`/` chars — single segment)
-//   `?`   → `[^/]`           (single non-`/` char)
-//   else  → regexp.QuoteMeta-ed literal
+//
+//	`**`  → `.*`           (zero or more chars, including `/`)
+//	`*`   → `[^/]*`         (zero or more non-`/` chars — single segment)
+//	`?`   → `[^/]`           (single non-`/` char)
+//	else  → regexp.QuoteMeta-ed literal
 //
 // Cached per pattern (we hit the same patterns many times during a
 // WalkDir loop). The candidate path is forward-slash-normalized
@@ -67,8 +68,14 @@ var noiseDirs = map[string]bool{
 
 // Glob implements the glob tool. Input: pattern, path.
 func Glob(input map[string]any, cwd string) any {
-	pattern := asString(input["pattern"], "*")
-	searchPath := asString(input["path"], cwd)
+	pattern := firstPresentString(input, "pattern", "glob", "file_glob", "fileGlob", "match")
+	if pattern == "" {
+		pattern = "*"
+	}
+	searchPath := firstPresentString(input, "path", "dir", "directory", "folder", "cwd")
+	if searchPath == "" {
+		searchPath = cwd
+	}
 	if !filepath.IsAbs(searchPath) {
 		searchPath = filepath.Join(cwd, searchPath)
 	}
@@ -115,15 +122,18 @@ func Glob(input map[string]any, cwd string) any {
 
 // Grep implements the grep tool. Input: pattern, path, glob/type, -i.
 func Grep(input map[string]any, cwd string) any {
-	pattern := asString(input["pattern"], "")
+	pattern := firstPresentString(input, "pattern", "query", "q", "regex", "search", "term")
 	if pattern == "" {
 		return map[string]string{"error": "pattern is required"}
 	}
-	searchPath := asString(input["path"], cwd)
+	searchPath := firstPresentString(input, "path", "dir", "directory", "folder", "cwd")
+	if searchPath == "" {
+		searchPath = cwd
+	}
 	if !filepath.IsAbs(searchPath) {
 		searchPath = filepath.Join(cwd, searchPath)
 	}
-	fileGlob := asString(input["glob"], asString(input["type"], ""))
+	fileGlob := firstPresentString(input, "glob", "file_glob", "fileGlob", "filename_glob", "filenameGlob", "type")
 
 	pre := ""
 	if asBool(input["-i"], false) {

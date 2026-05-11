@@ -206,17 +206,17 @@ func (e *Executor) Execute(name string, inputRaw json.RawMessage) (result any, c
 		if e.Hooks.OnCodeView != nil {
 			if m, ok := r.(map[string]any); ok {
 				if content, ok := m["content"].(string); ok {
-					e.Hooks.OnCodeView(asString(input["path"], ""), content, false)
+					e.Hooks.OnCodeView(firstPresentString(input, "path", "file", "file_path", "filePath", "filename"), content, false)
 				}
 			}
 		}
 		return r, true
 	case "write_file":
-		content := asString(input["content"], "")
+		content := firstPresentString(input, "content", "text", "contents", "body", "data")
 		r := WriteFile(input, e.CWD, e.Scope)
 		if e.Hooks.OnCodeView != nil {
 			if m, ok := r.(map[string]any); ok && m["ok"] == true {
-				e.Hooks.OnCodeView(asString(input["path"], ""), content, true)
+				e.Hooks.OnCodeView(firstPresentString(input, "path", "file", "file_path", "filePath", "filename"), content, true)
 			}
 		}
 		return r, true
@@ -225,9 +225,9 @@ func (e *Executor) Execute(name string, inputRaw json.RawMessage) (result any, c
 		if e.Hooks.OnCodeDiff != nil {
 			if m, ok := r.(map[string]any); ok && m["ok"] == true {
 				e.Hooks.OnCodeDiff(
-					asString(input["path"], ""),
-					asString(input["old_string"], asString(input["old_text"], "")),
-					asString(input["new_string"], asString(input["new_text"], "")),
+					firstPresentString(input, "path", "file", "file_path", "filePath", "filename"),
+					firstPresentString(input, "old_string", "old_text", "oldString", "old_blob", "oldBlob", "old_str", "oldStr", "old", "find", "search"),
+					firstPresentString(input, "new_string", "new_text", "newString", "new_blob", "newBlob", "new_str", "newStr", "new", "replace", "replacement"),
 				)
 			}
 		}
