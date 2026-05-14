@@ -7,7 +7,9 @@
 #   powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 #
 # Optional overrides:
-#   $env:SPORE_CODE_VERSION = 'beta'
+#   $env:SPORE_CODE_SOURCE  = 'auto' # auto, local, github, or npm
+#   $env:SPORE_CODE_REF     = 'work/spore-code-20260513'
+#   $env:SPORE_CODE_VERSION = 'beta' # npm dist-tag/version when source=npm
 #   $env:SPORE_CODE_PACKAGE = '@vibe-coalition/spore-code'
 #   $env:SPORE_CODE_PREFIX  = "$env:LOCALAPPDATA\spore-code-npm"
 #
@@ -18,8 +20,11 @@ $ErrorActionPreference = 'Stop'
 
 $Package = if ($env:SPORE_CODE_PACKAGE) { $env:SPORE_CODE_PACKAGE } else { '@vibe-coalition/spore-code' }
 $Version = if ($env:SPORE_CODE_VERSION) { $env:SPORE_CODE_VERSION } else { 'beta' }
+$Ref = if ($env:SPORE_CODE_REF) { $env:SPORE_CODE_REF } else { 'work/spore-code-20260513' }
+$Source = if ($env:SPORE_CODE_SOURCE) { $env:SPORE_CODE_SOURCE.ToLowerInvariant() } else { 'auto' }
 $Prefix = if ($env:SPORE_CODE_PREFIX) { $env:SPORE_CODE_PREFIX } else { '' }
 $MinNodeMajor = 22
+$Repo = 'Vibe-Coalition/spore-code'
 
 function Write-Step([string]$msg) { Write-Host "-> $msg" -ForegroundColor Cyan }
 function Write-Ok  ([string]$msg) { Write-Host "OK $msg" -ForegroundColor Green }
@@ -41,7 +46,38 @@ if ($nodeMajor -lt $MinNodeMajor) {
   Die "Node.js $MinNodeMajor+ is required; found v$nodeVersionText."
 }
 
-$Spec = if ($Version) { "$Package@$Version" } else { $Package }
+if ($Source -eq 'auto') {
+  $localPackage = Join-Path $PSScriptRoot 'package.json'
+  if (Test-Path $localPackage) {
+    try {
+      $pkg = Get-Content -Raw $localPackage | ConvertFrom-Json
+      if ($pkg.name -eq $Package) { $Source = 'local' } else { $Source = 'github' }
+    } catch {
+      $Source = 'github'
+    }
+  } else {
+    $Source = 'github'
+  }
+}
+
+switch ($Source) {
+  'local' {
+    if (-not (Test-Path (Join-Path $PSScriptRoot 'package.json'))) {
+      Die 'Local install requested, but package.json was not found next to install.ps1.'
+    }
+    $Spec = $PSScriptRoot
+  }
+  'github' {
+    $Spec = "https://github.com/$Repo/archive/refs/heads/$Ref.tar.gz"
+  }
+  'npm' {
+    $Spec = if ($Version) { "$Package@$Version" } else { $Package }
+  }
+  default {
+    Die "Unsupported SPORE_CODE_SOURCE=$Source. Use auto, local, github, or npm."
+  }
+}
+
 $NpmArgs = @('install', '-g')
 if ($Prefix) {
   [void](New-Item -ItemType Directory -Path $Prefix -Force)
@@ -50,6 +86,9 @@ if ($Prefix) {
 $NpmArgs += $Spec
 
 Write-Step "Installing $Spec with npm"
+if ($Source -eq 'github') {
+  Write-Hint 'Using GitHub branch fallback because the npm beta may not be published yet.'
+}
 & npm @NpmArgs
 if ($LASTEXITCODE -ne 0) { Die 'npm install failed' }
 

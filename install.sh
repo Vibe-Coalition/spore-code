@@ -4,7 +4,9 @@
 #   curl -fsSL https://raw.githubusercontent.com/Vibe-Coalition/spore-code/main/install.sh | sh
 #
 # Optional overrides:
-#   SPORE_CODE_VERSION=beta                  install npm dist-tag/version (default: beta)
+#   SPORE_CODE_SOURCE=auto                   auto, local, github, or npm
+#   SPORE_CODE_REF=work/spore-code-20260513  GitHub branch/tag for unpublished beta
+#   SPORE_CODE_VERSION=beta                  npm dist-tag/version when source=npm
 #   SPORE_CODE_PACKAGE=@vibe-coalition/spore-code
 #   SPORE_CODE_PREFIX="$HOME/.local/share/spore-code-npm"
 #
@@ -14,9 +16,13 @@ set -eu
 
 PACKAGE="${SPORE_CODE_PACKAGE:-@vibe-coalition/spore-code}"
 VERSION="${SPORE_CODE_VERSION:-beta}"
+REF="${SPORE_CODE_REF:-work/spore-code-20260513}"
+SOURCE="${SPORE_CODE_SOURCE:-auto}"
 PREFIX="${SPORE_CODE_PREFIX:-}"
 BIN="spore"
 MIN_NODE_MAJOR=22
+REPO="Vibe-Coalition/spore-code"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd -P || pwd)"
 
 if [ -t 1 ]; then
   C_BOLD="$(printf '\033[1m')"
@@ -50,11 +56,30 @@ if [ "$node_major" -lt "$MIN_NODE_MAJOR" ]; then
   die "Node.js $MIN_NODE_MAJOR+ is required; found $(node --version)."
 fi
 
-if [ -n "$VERSION" ]; then
-  SPEC="$PACKAGE@$VERSION"
-else
-  SPEC="$PACKAGE"
-fi
+case "$SOURCE" in
+  auto)
+    if [ -f "$SCRIPT_DIR/package.json" ] && grep -q "\"name\"[[:space:]]*:[[:space:]]*\"$PACKAGE\"" "$SCRIPT_DIR/package.json" 2>/dev/null; then
+      SOURCE="local"
+    else
+      SOURCE="github"
+    fi
+    ;;
+  local|github|npm) ;;
+  *) die "Unsupported SPORE_CODE_SOURCE=$SOURCE. Use auto, local, github, or npm." ;;
+esac
+
+case "$SOURCE" in
+  local)
+    [ -f "$SCRIPT_DIR/package.json" ] || die "Local install requested, but package.json was not found next to install.sh."
+    SPEC="$SCRIPT_DIR"
+    ;;
+  github)
+    SPEC="https://github.com/$REPO/archive/refs/heads/$REF.tar.gz"
+    ;;
+  npm)
+    if [ -n "$VERSION" ]; then SPEC="$PACKAGE@$VERSION"; else SPEC="$PACKAGE"; fi
+    ;;
+esac
 
 NPM_ARGS="install -g"
 if [ -n "$PREFIX" ]; then
@@ -63,6 +88,9 @@ if [ -n "$PREFIX" ]; then
 fi
 
 say "Installing ${C_BOLD}$SPEC${C_RESET} with npm"
+if [ "$SOURCE" = "github" ]; then
+  hint "Using GitHub branch fallback because the npm beta may not be published yet."
+fi
 # shellcheck disable=SC2086
 npm $NPM_ARGS "$SPEC" || die "npm install failed"
 

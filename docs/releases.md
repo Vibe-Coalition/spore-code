@@ -69,6 +69,12 @@ Install options for testers:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Vibe-Coalition/spore-code/main/install.sh | sh
+SPORE_CODE_SOURCE=npm npm install -g @vibe-coalition/spore-code@beta
+```
+
+After the npm beta package is published, direct npm/npx installs work:
+
+```sh
 npm install -g @vibe-coalition/spore-code@beta
 npx @vibe-coalition/spore-code@beta
 ```

@@ -77,16 +77,21 @@ policy bypass:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-The installers require Node.js 22+ and install the npm beta package by default.
+The installers require Node.js 22+. In a downloaded zip or local checkout they
+install from the local folder. In one-liner mode they install from the GitHub
+branch tarball until the npm beta package is published.
+
 Optional overrides:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `SPORE_CODE_VERSION` | `beta` | npm version or dist-tag to install |
+| `SPORE_CODE_SOURCE` | `auto` | `auto`, `local`, `github`, or `npm` |
+| `SPORE_CODE_REF` | `work/spore-code-20260513` | GitHub branch/tag when source is `github` |
+| `SPORE_CODE_VERSION` | `beta` | npm version or dist-tag when source is `npm` |
 | `SPORE_CODE_PACKAGE` | `@vibe-coalition/spore-code` | npm package name |
 | `SPORE_CODE_PREFIX` | npm global prefix | custom npm install prefix |
 
-Direct npm beta install:
+Direct npm beta install, once published:
 
 ```sh
 npm install -g @vibe-coalition/spore-code@beta
