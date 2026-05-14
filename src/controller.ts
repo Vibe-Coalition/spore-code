@@ -172,7 +172,7 @@ export class SporeController extends EventEmitter {
     this.log.writeMessage({role: 'user', text, timestamp: Date.now()});
     const pc = this.projectContext();
     const payload: Record<string, unknown> = {
-      type: 'chat:submit',
+      type: 'chat',
       sessionId: this.sessionId,
       userName: this.cfg.connection.user,
       content: text,
@@ -333,6 +333,9 @@ export class SporeController extends EventEmitter {
         break;
       case 'chat:status':
         this.handleStatus(frame);
+        break;
+      case 'chat:user-message':
+        this.handlePeerUserMessage(frame);
         break;
       case 'chat:tool':
         this.appendActivity({
@@ -937,6 +940,12 @@ export class SporeController extends EventEmitter {
         status: verb === 'done' || frame.status === 'completed' ? 'done' : frame.status === 'error' ? 'error' : 'running'
       });
     }
+  }
+
+  private handlePeerUserMessage(frame: JsonObject): void {
+    const text = String(frame.text || '').trim();
+    if (!text) return;
+    this.push('user', text);
   }
 
   private projectContext(): ProjectContext {

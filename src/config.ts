@@ -1,8 +1,12 @@
 import fs from 'node:fs';
+import http from 'node:http';
+import https from 'node:https';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline/promises';
 import {stdin as input, stdout as output} from 'node:process';
+import {URL} from 'node:url';
 import type {SporeConfig} from './protocol.js';
 import {ensureDir, homeSporeDir, safeWriteFile} from './util.js';
 
@@ -184,24 +188,108 @@ export function loadLastSession(cfg: SporeConfig): {sessionId: string; cwd: stri
 
 export async function runSetupWizard(cwd: string, base?: SporeConfig): Promise<SporeConfig> {
   const cfg = base ? cloneConfig(base) : defaultConfig(cwd);
-  const host = await promptText(`Spore Core host [${cfg.connection.host}]: `);
-  const port = await promptText(`Spore Core port [${cfg.connection.port}]: `);
-  const user = await promptText(`Username [${cfg.connection.user}]: `);
-  const method = (await promptText('Auth method: invite or password [password]: ')).trim().toLowerCase();
-  cfg.connection.host = host.trim() || cfg.connection.host;
-  cfg.connection.port = Number(port.trim() || cfg.connection.port);
-  cfg.connection.user = user.trim() || cfg.connection.user;
-  if (method === 'invite') {
-    cfg.connection.auth_method = 'invite';
-    cfg.connection.key = await promptSecret('Invite key: ');
-  } else {
-    cfg.connection.auth_method = 'password';
-    cfg.connection.password = await promptSecret('Password: ');
+  output.write('\n');
+  output.write('╔════════════════════════════════════════╗\n');
+  output.write('║  Spore Code — first-time setup        ║\n');
+  output.write('╚════════════════════════════════════════╝\n\n');
+
+  output.write('1. Connect to Spore Core\n');
+  output.write('   Enter your Spore Core server address.\n');
+  output.write('   Examples: 192.168.1.10 · https://spore.example.com\n');
+  let {host, port} = await promptEndpoint(cfg.connection.host, cfg.connection.port || DEFAULT_PORT);
+  output.write('\n');
+
+  output.write('2. Your identity\n');
+  output.write('   Choose a username — the agent will remember you by this name.\n');
+  let user = '';
+  while (!user) {
+    user = cleanPromptLine(await promptText(`   Username [${cfg.connection.user}]: `)) || cfg.connection.user;
+    if (!user) output.write('   Username is required.\n');
   }
-  const theme = await promptText(`Theme [${cfg.display.theme}]: `);
-  cfg.display.theme = theme.trim() || cfg.display.theme;
+  output.write('\n');
+
+  output.write('3. Authentication\n');
+  output.write('   Paste either your invite key or your Spore account password.\n');
+  let secret = await promptLoginSecret('');
+  output.write('\n');
+
+  let auth: AuthAttempt | null = null;
+  for (;;) {
+    output.write('4. Testing connection...\n');
+    try {
+      auth = await testAuthAuto(host, port, user, secret);
+      if (!auth.deviceToken) throw new Error('server authenticated but did not issue a device token; update Spore Core and retry');
+      output.write('   OK Connected and authenticated successfully.\n');
+      break;
+    } catch (err) {
+      output.write(`   ERR ${err instanceof Error ? err.message : String(err)}\n`);
+      const retry = await promptConfirm('   Edit details and retry?', true);
+      if (!retry) throw new Error('setup aborted');
+      const next = await promptEndpoint(host, port);
+      host = next.host;
+      port = next.port;
+      for (;;) {
+        const nextUser = cleanPromptLine(await promptText(`   Username [${user}]: `)) || user;
+        if (nextUser) {
+          user = nextUser;
+          break;
+        }
+        output.write('   Username is required.\n');
+      }
+      secret = await promptLoginSecret(secret);
+      output.write('\n');
+    }
+  }
+  output.write('\n');
+
+  output.write('5. Choose a theme\n');
+  output.write('   dark    purple/cyan terminal theme\n');
+  output.write('   oled    high contrast black terminal theme\n');
+  output.write('   light   orange-accent light terminal theme\n');
+  const theme = cleanPromptLine(await promptText(`   Theme [${cfg.display.theme || 'dark'}]: `)) || cfg.display.theme || 'dark';
+  cfg.display.theme = ['dark', 'oled', 'light'].includes(theme) ? theme : 'dark';
+
+  cfg.connection.host = host;
+  cfg.connection.port = port;
+  cfg.connection.user = user;
+  cfg.connection.auth_method = 'device';
+  cfg.connection.key = '';
+  cfg.connection.password = '';
+  cfg.connection.device_id = auth?.deviceId || '';
+  if (auth?.deviceToken) saveDeviceToken(cfg, auth.deviceToken);
   saveConfig(cfg);
+  output.write(`\n   OK Saved to ${path.join(cfg.globalDir, 'config.toml')}\n\n`);
   return cfg;
+}
+
+async function promptEndpoint(defaultHost: string, defaultPort: number): Promise<{host: string; port: number}> {
+  const host = cleanPromptLine(await promptText(`   Host [${defaultHost}]: `)) || defaultHost;
+  let port = defaultPort;
+  if (!host.includes('://')) {
+    const portText = cleanPromptLine(await promptText(`   Port [${defaultPort}]: `));
+    const parsed = Number(portText || defaultPort);
+    if (Number.isInteger(parsed) && parsed > 0) port = parsed;
+  }
+  return {host, port};
+}
+
+async function promptLoginSecret(existing: string): Promise<string> {
+  for (;;) {
+    const label = existing
+      ? '   Invite key or account password [keep existing; paste replacement or enter to keep]: '
+      : '   Invite key or account password: ';
+    const secret = cleanPromptLine(await promptSecret(label)).trim();
+    if (secret) return secret;
+    if (existing) return existing;
+    output.write('   Invite key or account password is required.\n');
+  }
+}
+
+async function promptConfirm(label: string, fallback: boolean): Promise<boolean> {
+  const suffix = fallback ? '[Y/n]' : '[y/N]';
+  const raw = (await promptText(`${label} ${suffix}: `)).trim().toLowerCase();
+  if (!raw) return fallback;
+  return raw === 'y' || raw === 'yes';
 }
 
 async function promptText(prompt: string): Promise<string> {
@@ -263,6 +351,106 @@ async function promptSecret(prompt: string): Promise<string> {
     input.resume();
     input.on('data', onData);
   });
+}
+
+function cleanPromptLine(line: string): string {
+  return String(line || '')
+    .replace(/\x1b\[200~/g, '')
+    .replace(/\x1b\[201~/g, '')
+    .replace(/[\r\n]+$/g, '');
+}
+
+interface AuthAttempt {
+  method: 'password' | 'invite';
+  deviceToken: string;
+  deviceId: string;
+}
+
+async function testAuthAuto(host: string, port: number, user: string, secret: string): Promise<AuthAttempt> {
+  const cleaned = secret.trim();
+  if (!cleaned) throw new Error('invite key or account password is required');
+  let passwordErr: unknown;
+  try {
+    return await testAuth(host, port, user, 'password', '', cleaned);
+  } catch (err) {
+    passwordErr = err;
+  }
+  try {
+    return await testAuth(host, port, user, 'invite', cleaned, '');
+  } catch (inviteErr) {
+    throw new Error(`account password failed (${errorMessage(passwordErr)}); invite key failed (${errorMessage(inviteErr)})`);
+  }
+}
+
+async function testAuth(host: string, port: number, user: string, method: 'password' | 'invite', key: string, password: string): Promise<AuthAttempt> {
+  const base = endpointBase(host, port);
+  if (!setupAuthTransportAllowed(base)) {
+    throw new Error(`refusing to send credentials over insecure HTTP to ${base} (use HTTPS, localhost/private LAN, or SPORE_CODE_ALLOW_INSECURE_AUTH=true)`);
+  }
+  const body = method === 'password'
+    ? {username: user, authMethod: 'password', password, issueDevice: true}
+    : {username: user, key, issueDevice: true};
+  const res = await postJson(new URL('/api/spore-code/auth', base), body);
+  return {
+    method,
+    deviceToken: typeof res.deviceToken === 'string' ? res.deviceToken : '',
+    deviceId: typeof res.deviceId === 'string' ? res.deviceId : ''
+  };
+}
+
+function endpointBase(host: string, port: number): string {
+  const raw = host.includes('://') ? host : `http://${host}:${port}`;
+  return raw.replace(/\/+$/, '');
+}
+
+function setupAuthTransportAllowed(base: string): boolean {
+  const u = new URL(base);
+  if (u.protocol === 'https:') return true;
+  const host = u.hostname;
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return true;
+  if (net.isIP(host)) {
+    const ip = net.isIP(host) ? host : '';
+    if (ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('169.254.')) return true;
+    const parts = ip.split('.').map(Number);
+    if (parts[0] === 172 && (parts[1] ?? 0) >= 16 && (parts[1] ?? 0) <= 31) return true;
+  }
+  return /^(1|true|yes)$/i.test(process.env.SPORE_CODE_ALLOW_INSECURE_AUTH || '');
+}
+
+async function postJson(url: URL, body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const raw = JSON.stringify(body);
+  const mod = url.protocol === 'https:' ? https : http;
+  return await new Promise<Record<string, unknown>>((resolve, reject) => {
+    const req = mod.request(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': String(Buffer.byteLength(raw))
+      },
+      timeout: 8000
+    }, res => {
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        let parsed: Record<string, unknown> = {};
+        try { parsed = data ? JSON.parse(data) as Record<string, unknown> : {}; } catch {}
+        if ((res.statusCode || 500) !== 200) {
+          reject(new Error(String(parsed.error || `HTTP ${res.statusCode}`)));
+          return;
+        }
+        resolve(parsed);
+      });
+    });
+    req.on('error', err => reject(new Error(`cannot reach server: ${err.message}`)));
+    req.on('timeout', () => req.destroy(new Error('cannot reach server: request timed out')));
+    req.write(raw);
+    req.end();
+  });
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 function mergeTomlFile(file: string, cfg: SporeConfig): void {

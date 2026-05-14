@@ -82,6 +82,7 @@ function parseArgsOrExit(argv: string[]): Args {
 }
 
 function renderApp(controller: SporeController): void {
+  if (process.stdout.isTTY) process.stdout.write('\x1b[2J\x1b[3J\x1b[H');
   render(<App controller={controller} />);
 }
 
