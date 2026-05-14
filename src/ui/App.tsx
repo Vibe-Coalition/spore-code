@@ -37,19 +37,14 @@ interface Palette {
 }
 
 export function App({controller}: Props) {
-  const app = useApp();
   const {stdout} = useStdout();
   const [state, setState] = useState<ClientState>({...controller.state, messages: [...controller.state.messages]});
-  const [input, setInput] = useState('');
-  const [suggestionIndex, setSuggestionIndex] = useState(0);
   const [focus, setFocus] = useState<PanelFocus>('chat');
   const [scroll, setScroll] = useState<ScrollState>({chat: 0, activity: 0, output: 0});
 
   const columns = Math.max(80, stdout.columns || 100);
   const rows = Math.max(24, stdout.rows || 32);
   const palette = useMemo(() => paletteFor(state.theme), [state.theme]);
-  const slashSuggestions = useMemo(() => slashCommandSuggestions(input, 8), [input]);
-  const showSlashSuggestions = input.startsWith('/') && slashSuggestions.length > 0 && !state.pendingApproval && !state.pendingPlan && !state.pendingQuestion;
   const activitySide = state.activityPanelOpen && columns >= 94;
   const chatVisibleCount = Math.max(5, Math.min(18, rows - (state.outputLogOpen ? 16 : 9)));
   const activityVisibleCount = Math.max(4, Math.min(10, rows - 8));
@@ -74,14 +69,6 @@ export function App({controller}: Props) {
     }));
   }, [state.messages.length, state.activity.length, state.outputLog.length, chatVisibleCount, activityVisibleCount, outputVisibleCount]);
 
-  useEffect(() => {
-    setSuggestionIndex(0);
-  }, [input]);
-
-  useEffect(() => {
-    setSuggestionIndex(prev => clamp(prev, 0, Math.max(0, slashSuggestions.length - 1)));
-  }, [slashSuggestions.length]);
-
   const scrollPanel = (target: PanelFocus, delta: number) => {
     setScroll(prev => {
       const next = {...prev};
@@ -96,6 +83,92 @@ export function App({controller}: Props) {
       [target]: clamp(value, 0, maxScroll(target, state, chatVisibleCount, activityVisibleCount, outputVisibleCount))
     }));
   };
+
+  const visibleMessages = sliceFromEnd(state.messages, chatVisibleCount, scroll.chat);
+  return (
+    <Box flexDirection="column">
+      <Box justifyContent="space-between">
+        <Text color={state.connected ? palette.success : palette.warning}>spore code npm</Text>
+        <Text color={palette.muted}>
+          {state.planMode ? 'PLAN' : 'EXEC'} · {state.scope || 'strict'} · perm:{state.permissionMode}
+          {state.workflowLabel ? ` · ${state.workflowLabel}` : ''} · {state.status}
+        </Text>
+      </Box>
+      <Box flexDirection="row">
+        <Box borderStyle="single" borderColor={focus === 'chat' ? palette.accent : palette.border} flexDirection="column" paddingX={1} flexGrow={1}>
+          <PanelHeader label="Chat" count={state.messages.length} scroll={scroll.chat} palette={palette} focused={focus === 'chat'} />
+          {visibleMessages.map((m, i) => (
+            <Box key={`${m.timestamp}-${i}`} flexDirection="column" marginBottom={1}>
+              <Text color={roleColor(m.role, palette)}>{m.role}{m.streaming ? ' streaming' : ''}</Text>
+              {m.text.split('\n').slice(0, 24).map((line, j) => <Text key={j}>{line || ' '}</Text>)}
+            </Box>
+          ))}
+          {visibleMessages.length === 0 && <Text color={palette.muted}>Connecting...</Text>}
+        </Box>
+        {activitySide && <ActivityPanel entries={state.activity} offset={scroll.activity} visibleCount={activityVisibleCount} focused={focus === 'activity'} palette={palette} />}
+      </Box>
+      {state.activityPanelOpen && !activitySide && <ActivityPanel entries={state.activity} offset={scroll.activity} visibleCount={Math.min(6, activityVisibleCount)} focused={focus === 'activity'} palette={palette} />}
+      {artifact && <ArtifactPanel entry={artifact} palette={palette} />}
+      {state.outputLogOpen && <OutputPanel entries={state.outputLog} offset={scroll.output} visibleCount={outputVisibleCount} focused={focus === 'output'} palette={palette} />}
+      {state.pendingApproval && (
+        <Box borderStyle="round" borderColor={palette.warning} flexDirection="column" paddingX={1}>
+          <Text color={palette.warning}>Allow {state.pendingApproval.name}?</Text>
+          <Text>{state.pendingApproval.summary}</Text>
+          <Text color={palette.muted}>Session rule: {state.pendingApproval.rule}</Text>
+          <Text color={palette.muted}>y/Enter allow once · a allow session · n/Esc deny</Text>
+        </Box>
+      )}
+      {state.pendingQuestion && (
+        <Box borderStyle="round" borderColor={palette.panel} flexDirection="column" paddingX={1}>
+          <Text color={palette.panel}>{state.pendingQuestion.question}</Text>
+          {state.pendingQuestion.options.map((o, i) => <Text key={o.label}>{i + 1}. {o.label}{o.description ? ` - ${o.description}` : ''}</Text>)}
+          <Text color={palette.muted}>{state.pendingQuestion.multi ? 'Type numbers or labels separated by commas, then Enter.' : 'Type an answer or option number and press Enter.'}</Text>
+        </Box>
+      )}
+      {state.pendingPlan && (
+        <Box borderStyle="round" borderColor={palette.panel} flexDirection="column" paddingX={1}>
+          <Text color={palette.panel}>Plan ready</Text>
+          <Text>{state.pendingPlan.awaitingFeedback ? 'Type revision feedback and press Enter.' : 'Press e/Enter to execute, r to revise, c/Esc to cancel.'}</Text>
+        </Box>
+      )}
+      {state.usageLine && <Text color={palette.muted}>{state.usageLine}</Text>}
+      <Composer
+        controller={controller}
+        state={state}
+        focus={focus}
+        setFocus={setFocus}
+        scrollPanel={scrollPanel}
+        scrollTo={scrollTo}
+        palette={palette}
+      />
+    </Box>
+  );
+}
+
+interface ComposerProps {
+  controller: SporeController;
+  state: ClientState;
+  focus: PanelFocus;
+  setFocus: React.Dispatch<React.SetStateAction<PanelFocus>>;
+  scrollPanel: (target: PanelFocus, delta: number) => void;
+  scrollTo: (target: PanelFocus, value: number) => void;
+  palette: Palette;
+}
+
+function Composer({controller, state, focus, setFocus, scrollPanel, scrollTo, palette}: ComposerProps) {
+  const app = useApp();
+  const [input, setInput] = useState('');
+  const [suggestionIndex, setSuggestionIndex] = useState(0);
+  const slashSuggestions = useMemo(() => slashCommandSuggestions(input, 8), [input]);
+  const showSlashSuggestions = input.startsWith('/') && slashSuggestions.length > 0 && !state.pendingApproval && !state.pendingPlan && !state.pendingQuestion;
+
+  useEffect(() => {
+    setSuggestionIndex(0);
+  }, [input]);
+
+  useEffect(() => {
+    setSuggestionIndex(prev => clamp(prev, 0, Math.max(0, slashSuggestions.length - 1)));
+  }, [slashSuggestions.length]);
 
   useInput((chunk, key) => {
     const isTab = Boolean((key as {tab?: boolean}).tab || chunk === '\t');
@@ -219,65 +292,17 @@ export function App({controller}: Props) {
     if (chunk && !key.ctrl && !key.meta) setInput(prev => prev + chunk);
   });
 
-  const visibleMessages = sliceFromEnd(state.messages, chatVisibleCount, scroll.chat);
   return (
     <Box flexDirection="column">
-      <Box justifyContent="space-between">
-        <Text color={state.connected ? palette.success : palette.warning}>spore code npm</Text>
-        <Text color={palette.muted}>
-          {state.planMode ? 'PLAN' : 'EXEC'} · {state.scope || 'strict'} · perm:{state.permissionMode}
-          {state.workflowLabel ? ` · ${state.workflowLabel}` : ''} · {state.status}
-        </Text>
-      </Box>
-      <Box flexDirection="row">
-        <Box borderStyle="single" borderColor={focus === 'chat' ? palette.accent : palette.border} flexDirection="column" paddingX={1} flexGrow={1}>
-          <PanelHeader label="Chat" count={state.messages.length} scroll={scroll.chat} palette={palette} focused={focus === 'chat'} />
-          {visibleMessages.map((m, i) => (
-            <Box key={`${m.timestamp}-${i}`} flexDirection="column" marginBottom={1}>
-              <Text color={roleColor(m.role, palette)}>{m.role}{m.streaming ? ' streaming' : ''}</Text>
-              {m.text.split('\n').slice(0, 24).map((line, j) => <Text key={j}>{line || ' '}</Text>)}
-            </Box>
-          ))}
-          {visibleMessages.length === 0 && <Text color={palette.muted}>Connecting...</Text>}
-        </Box>
-        {activitySide && <ActivityPanel entries={state.activity} offset={scroll.activity} visibleCount={activityVisibleCount} focused={focus === 'activity'} palette={palette} />}
-      </Box>
-      {state.activityPanelOpen && !activitySide && <ActivityPanel entries={state.activity} offset={scroll.activity} visibleCount={Math.min(6, activityVisibleCount)} focused={focus === 'activity'} palette={palette} />}
-      {artifact && <ArtifactPanel entry={artifact} palette={palette} />}
-      {state.outputLogOpen && <OutputPanel entries={state.outputLog} offset={scroll.output} visibleCount={outputVisibleCount} focused={focus === 'output'} palette={palette} />}
-      {state.pendingApproval && (
-        <Box borderStyle="round" borderColor={palette.warning} flexDirection="column" paddingX={1}>
-          <Text color={palette.warning}>Allow {state.pendingApproval.name}?</Text>
-          <Text>{state.pendingApproval.summary}</Text>
-          <Text color={palette.muted}>Session rule: {state.pendingApproval.rule}</Text>
-          <Text color={palette.muted}>y/Enter allow once · a allow session · n/Esc deny</Text>
-        </Box>
-      )}
-      {state.pendingQuestion && (
-        <Box borderStyle="round" borderColor={palette.panel} flexDirection="column" paddingX={1}>
-          <Text color={palette.panel}>{state.pendingQuestion.question}</Text>
-          {state.pendingQuestion.options.map((o, i) => <Text key={o.label}>{i + 1}. {o.label}{o.description ? ` - ${o.description}` : ''}</Text>)}
-          <Text color={palette.muted}>{state.pendingQuestion.multi ? 'Type numbers or labels separated by commas, then Enter.' : 'Type an answer or option number and press Enter.'}</Text>
-        </Box>
-      )}
-      {state.pendingPlan && (
-        <Box borderStyle="round" borderColor={palette.panel} flexDirection="column" paddingX={1}>
-          <Text color={palette.panel}>Plan ready</Text>
-          <Text>{state.pendingPlan.awaitingFeedback ? 'Type revision feedback and press Enter.' : 'Press e/Enter to execute, r to revise, c/Esc to cancel.'}</Text>
-        </Box>
-      )}
-      {state.usageLine && <Text color={palette.muted}>{state.usageLine}</Text>}
-      <Box flexDirection="column">
-        <InputBox input={input} palette={palette} />
-        {showSlashSuggestions && <SlashSuggestionPanel suggestions={slashSuggestions} selected={suggestionIndex} palette={palette} />}
-        <Text color={palette.muted}>
-          {state.generating
-            ? 'working; Ctrl+C stops'
-            : showSlashSuggestions
-              ? 'Tab complete · Up/Down choose · Enter runs command'
-              : 'Ctrl+P activity · Ctrl+O output · Tab focus · PgUp/PgDn scroll'} · focus:{focus}
-        </Text>
-      </Box>
+      <InputBox input={input} palette={palette} />
+      {showSlashSuggestions && <SlashSuggestionPanel suggestions={slashSuggestions} selected={suggestionIndex} palette={palette} />}
+      <Text color={palette.muted}>
+        {state.generating
+          ? 'working; Ctrl+C stops'
+          : showSlashSuggestions
+            ? 'Tab complete · Up/Down choose · Enter runs command'
+            : 'Ctrl+P activity · Ctrl+O output · Tab focus · PgUp/PgDn scroll'} · focus:{focus}
+      </Text>
     </Box>
   );
 }
