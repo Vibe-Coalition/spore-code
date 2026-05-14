@@ -47,10 +47,23 @@ export function App({controller}: Props) {
   const rows = Math.max(24, stdout.rows || 32);
   const palette = useMemo(() => paletteFor(state.theme), [state.theme]);
   const activitySide = state.activityPanelOpen && columns >= 94;
-  const chatVisibleCount = Math.max(5, Math.min(18, rows - (state.outputLogOpen ? 16 : 9)));
-  const activityVisibleCount = Math.max(4, Math.min(10, rows - 8));
-  const outputVisibleCount = Math.max(5, Math.min(12, Math.floor(rows / 3)));
   const artifact = latestArtifact(state.activity);
+  const safeRows = Math.max(18, rows - 1);
+  const modalHeight = state.pendingApproval ? 5 : state.pendingQuestion ? Math.min(6, 3 + state.pendingQuestion.options.length) : state.pendingPlan ? 3 : 0;
+  const usageHeight = state.usageLine ? 1 : 0;
+  let panelRows = Math.max(3, safeRows - 1 - COMPOSER_LINES - modalHeight - usageHeight);
+  const outputPanelHeight = state.outputLogOpen && panelRows >= 10 ? Math.min(6, Math.max(3, Math.floor(panelRows * 0.25))) : 0;
+  panelRows -= outputPanelHeight;
+  const artifactPanelHeight = artifact && panelRows >= 10 ? Math.min(5, Math.max(3, Math.floor(panelRows * 0.25))) : 0;
+  panelRows -= artifactPanelHeight;
+  const stackedActivityHeight = !activitySide && state.activityPanelOpen && panelRows >= 9 ? Math.min(5, Math.max(3, Math.floor(panelRows * 0.35))) : 0;
+  const chatPanelHeight = Math.max(3, panelRows - stackedActivityHeight);
+  const activityPanelHeight = activitySide ? chatPanelHeight : stackedActivityHeight;
+  const chatVisibleCount = Math.max(1, Math.floor((chatPanelHeight - 2) / 3));
+  const chatTextLineLimit = Math.max(1, Math.min(6, chatPanelHeight - 3));
+  const activityVisibleCount = Math.max(1, Math.floor((activityPanelHeight - 2) / 3));
+  const outputVisibleCount = Math.max(1, outputPanelHeight - 2);
+  const artifactVisibleCount = Math.max(1, artifactPanelHeight - 2);
 
   useEffect(() => {
     const onChange = (next: ClientState) => setState({...next, messages: [...next.messages]});
@@ -87,7 +100,7 @@ export function App({controller}: Props) {
 
   const visibleMessages = sliceFromEnd(state.messages, chatVisibleCount, scroll.chat);
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" height={safeRows} overflow="hidden">
       <Box justifyContent="space-between">
         <Text color={state.connected ? palette.success : palette.warning}>spore code npm</Text>
         <Text color={palette.muted}>
@@ -95,24 +108,24 @@ export function App({controller}: Props) {
           {state.workflowLabel ? ` · ${state.workflowLabel}` : ''} · {state.status}
         </Text>
       </Box>
-      <Box flexDirection="row">
-        <Box borderStyle="single" borderColor={focus === 'chat' ? palette.accent : palette.border} flexDirection="column" paddingX={1} flexGrow={1}>
+      <Box flexDirection="row" height={chatPanelHeight} overflow="hidden">
+        <Box borderStyle="single" borderColor={focus === 'chat' ? palette.accent : palette.border} flexDirection="column" paddingX={1} flexGrow={1} height={chatPanelHeight} overflow="hidden">
           <PanelHeader label="Chat" count={state.messages.length} scroll={scroll.chat} palette={palette} focused={focus === 'chat'} />
           {visibleMessages.map((m, i) => (
-            <Box key={`${m.timestamp}-${i}`} flexDirection="column" marginBottom={1}>
+            <Box key={`${m.timestamp}-${i}`} flexDirection="column">
               <Text color={roleColor(m.role, palette)}>{m.role}{m.streaming ? ' streaming' : ''}</Text>
-              {m.text.split('\n').slice(0, 24).map((line, j) => <Text key={j}>{line || ' '}</Text>)}
+              {m.text.split('\n').slice(0, chatTextLineLimit).map((line, j) => <Text key={j}>{clip(line || ' ', activitySide ? columns - 58 : columns - 6)}</Text>)}
             </Box>
           ))}
           {visibleMessages.length === 0 && <Text color={palette.muted}>Connecting...</Text>}
         </Box>
-        {activitySide && <ActivityPanel entries={state.activity} offset={scroll.activity} visibleCount={activityVisibleCount} focused={focus === 'activity'} palette={palette} />}
+        {activitySide && <ActivityPanel entries={state.activity} offset={scroll.activity} visibleCount={activityVisibleCount} focused={focus === 'activity'} palette={palette} height={activityPanelHeight} />}
       </Box>
-      {state.activityPanelOpen && !activitySide && <ActivityPanel entries={state.activity} offset={scroll.activity} visibleCount={Math.min(6, activityVisibleCount)} focused={focus === 'activity'} palette={palette} />}
-      {artifact && <ArtifactPanel entry={artifact} palette={palette} />}
-      {state.outputLogOpen && <OutputPanel entries={state.outputLog} offset={scroll.output} visibleCount={outputVisibleCount} focused={focus === 'output'} palette={palette} />}
+      {state.activityPanelOpen && !activitySide && activityPanelHeight > 0 && <ActivityPanel entries={state.activity} offset={scroll.activity} visibleCount={activityVisibleCount} focused={focus === 'activity'} palette={palette} height={activityPanelHeight} />}
+      {artifact && artifactPanelHeight > 0 && <ArtifactPanel entry={artifact} palette={palette} visibleCount={artifactVisibleCount} height={artifactPanelHeight} />}
+      {state.outputLogOpen && outputPanelHeight > 0 && <OutputPanel entries={state.outputLog} offset={scroll.output} visibleCount={outputVisibleCount} focused={focus === 'output'} palette={palette} height={outputPanelHeight} />}
       {state.pendingApproval && (
-        <Box borderStyle="round" borderColor={palette.warning} flexDirection="column" paddingX={1}>
+        <Box borderStyle="round" borderColor={palette.warning} flexDirection="column" paddingX={1} height={modalHeight} overflow="hidden">
           <Text color={palette.warning}>Allow {state.pendingApproval.name}?</Text>
           <Text>{state.pendingApproval.summary}</Text>
           <Text color={palette.muted}>Session rule: {state.pendingApproval.rule}</Text>
@@ -120,14 +133,14 @@ export function App({controller}: Props) {
         </Box>
       )}
       {state.pendingQuestion && (
-        <Box borderStyle="round" borderColor={palette.panel} flexDirection="column" paddingX={1}>
+        <Box borderStyle="round" borderColor={palette.panel} flexDirection="column" paddingX={1} height={modalHeight} overflow="hidden">
           <Text color={palette.panel}>{state.pendingQuestion.question}</Text>
           {state.pendingQuestion.options.map((o, i) => <Text key={o.label}>{i + 1}. {o.label}{o.description ? ` - ${o.description}` : ''}</Text>)}
           <Text color={palette.muted}>{state.pendingQuestion.multi ? 'Type numbers or labels separated by commas, then Enter.' : 'Type an answer or option number and press Enter.'}</Text>
         </Box>
       )}
       {state.pendingPlan && (
-        <Box borderStyle="round" borderColor={palette.panel} flexDirection="column" paddingX={1}>
+        <Box borderStyle="round" borderColor={palette.panel} flexDirection="column" paddingX={1} height={modalHeight} overflow="hidden">
           <Text color={palette.panel}>Plan ready</Text>
           <Text>{state.pendingPlan.awaitingFeedback ? 'Type revision feedback and press Enter.' : 'Press e/Enter to execute, r to revise, c/Esc to cancel.'}</Text>
         </Box>
@@ -413,14 +426,14 @@ function PanelHeader({label, count, scroll, palette, focused}: {label: string; c
   );
 }
 
-function ActivityPanel({entries, offset, visibleCount, focused, palette}: {entries: ActivityEntry[]; offset: number; visibleCount: number; focused: boolean; palette: Palette}) {
+function ActivityPanel({entries, offset, visibleCount, focused, palette, height}: {entries: ActivityEntry[]; offset: number; visibleCount: number; focused: boolean; palette: Palette; height: number}) {
   const visible = sliceFromEnd(entries, visibleCount, offset);
   return (
-    <Box borderStyle="single" borderColor={focused ? palette.accent : palette.panel} flexDirection="column" paddingX={1} width={focused ? 48 : 44}>
+    <Box borderStyle="single" borderColor={focused ? palette.accent : palette.panel} flexDirection="column" paddingX={1} width={focused ? 48 : 44} height={height} overflow="hidden">
       <PanelHeader label="Activity" count={entries.length} scroll={offset} palette={palette} focused={focused} />
       {visible.length === 0 && <Text color={palette.muted}>No activity yet.</Text>}
       {visible.map(entry => (
-        <Box key={entry.id} flexDirection="column" marginBottom={1}>
+        <Box key={entry.id} flexDirection="column">
           <Text color={activityColor(entry, palette)}>
             {activityIcon(entry)} {entry.title}{entry.detail ? ` · ${entry.detail}` : ''}
           </Text>
@@ -432,20 +445,20 @@ function ActivityPanel({entries, offset, visibleCount, focused, palette}: {entri
   );
 }
 
-function ArtifactPanel({entry, palette}: {entry: ActivityEntry; palette: Palette}) {
-  const lines = (entry.preview || '').split(/\r?\n/).slice(0, 8);
+function ArtifactPanel({entry, palette, visibleCount, height}: {entry: ActivityEntry; palette: Palette; visibleCount: number; height: number}) {
+  const lines = (entry.preview || '').split(/\r?\n/).slice(0, visibleCount);
   return (
-    <Box borderStyle="single" borderColor={entry.kind === 'diff' ? palette.warning : palette.panel} flexDirection="column" paddingX={1}>
+    <Box borderStyle="single" borderColor={entry.kind === 'diff' ? palette.warning : palette.panel} flexDirection="column" paddingX={1} height={height} overflow="hidden">
       <Text color={entry.kind === 'diff' ? palette.warning : palette.panel}>{entry.kind === 'diff' ? 'Diff' : 'File'} · {entry.title}{entry.detail ? ` · ${entry.detail}` : ''}</Text>
       {lines.length ? lines.map((line, i) => <Text key={i} color={palette.muted}>{clip(line || ' ', 180)}</Text>) : <Text color={palette.muted}>No preview available.</Text>}
     </Box>
   );
 }
 
-function OutputPanel({entries, offset, visibleCount, focused, palette}: {entries: OutputEntry[]; offset: number; visibleCount: number; focused: boolean; palette: Palette}) {
+function OutputPanel({entries, offset, visibleCount, focused, palette, height}: {entries: OutputEntry[]; offset: number; visibleCount: number; focused: boolean; palette: Palette; height: number}) {
   const visible = sliceFromEnd(entries, visibleCount, offset);
   return (
-    <Box borderStyle="single" borderColor={focused ? palette.accent : palette.warning} flexDirection="column" paddingX={1}>
+    <Box borderStyle="single" borderColor={focused ? palette.accent : palette.warning} flexDirection="column" paddingX={1} height={height} overflow="hidden">
       <PanelHeader label="Output Log" count={entries.length} scroll={offset} palette={palette} focused={focused} />
       {visible.length === 0 && <Text color={palette.muted}>No command output captured yet.</Text>}
       {visible.map(entry => (
