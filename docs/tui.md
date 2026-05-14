@@ -25,6 +25,10 @@ The main view contains:
 - Ctrl+P toggles the activity panel.
 - Ctrl+O toggles the command output panel.
 - Tab cycles scroll focus between chat, activity, and output.
+- Typing `/` opens slash-command suggestions.
+- Tab completes the selected slash command while suggestions are visible.
+- Up/Down choose suggestions while the slash-command menu is visible; otherwise
+  they walk input history.
 - PageUp/PageDown or Ctrl+U/Ctrl+D scroll the focused panel.
 - Home/End jumps to the oldest/newest content in the focused panel.
 
@@ -44,6 +48,10 @@ The main view contains:
 | `/architecture` | show code architecture summary |
 | `/calls` | show symbol-level call hints |
 | `/impact` | show symbol-level impact hints |
+
+If a local code index already exists, startup announces that structural lookup
+tools are ready and refreshes the index in the background. If no index exists,
+startup builds one automatically.
 
 ## Plan Mode
 

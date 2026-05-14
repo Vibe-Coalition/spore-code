@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {isPlanReady, normalizeQuestionAnswer, parsePlanQuestions} from '../src/controller.js';
+import {isPlanReady, normalizeQuestionAnswer, parsePlanQuestions, slashCommandCompletion, slashCommandSuggestions} from '../src/controller.js';
 
 test('parsePlanQuestions extracts options from QUESTIONS block', () => {
   const q = parsePlanQuestions(`QUESTIONS:
@@ -37,4 +37,14 @@ test('parsePlanQuestions handles fenced JSON question blocks', () => {
   assert.ok(q);
   assert.equal(q.multi, true);
   assert.equal(q.options[1]?.label, 'Tools');
+});
+
+test('slash command suggestions and completion match command prefixes', () => {
+  const suggestions = slashCommandSuggestions('/mo');
+  assert.deepEqual(suggestions.map(s => s.name), ['/mode', '/models_preset']);
+  assert.equal(slashCommandCompletion('/mo', 0), '/mode ');
+  assert.equal(slashCommandCompletion('/mod', 0), '/mode ');
+  assert.equal(slashCommandCompletion('/cle', 0), '/clear');
+  assert.deepEqual(slashCommandSuggestions('/mode auto'), []);
+  assert.deepEqual(slashCommandSuggestions('hello'), []);
 });

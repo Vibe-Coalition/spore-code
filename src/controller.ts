@@ -12,6 +12,58 @@ import {CLIENT_VERSION} from './version.js';
 
 const PLAN_EXECUTE_MSG = `[The user has approved the plan above. Switch to execute mode and implement it now. Proceed step by step, executing all the changes you outlined.]`;
 
+export interface SlashCommand {
+  name: string;
+  usage: string;
+  description: string;
+}
+
+export const SLASH_COMMANDS: SlashCommand[] = [
+  {name: '/plan', usage: '/plan', description: 'toggle plan/execute mode'},
+  {name: '/new', usage: '/new', description: 'start a fresh session in this cwd'},
+  {name: '/sessions', usage: '/sessions', description: 'list saved sessions for this project'},
+  {name: '/resume', usage: '/resume <id|n>', description: 'resume a saved session'},
+  {name: '/context', usage: '/context [refresh]', description: 'show structured project context'},
+  {name: '/tree', usage: '/tree [depth]', description: 'show project tree'},
+  {name: '/init', usage: '/init', description: 'create SPORE.md and ignore .spore-code/'},
+  {name: '/index', usage: '/index', description: 'build or refresh the local code index'},
+  {name: '/architecture', usage: '/architecture', description: 'show code architecture summary'},
+  {name: '/impact', usage: '/impact <symbol>', description: 'show symbol-level impact hints'},
+  {name: '/calls', usage: '/calls <symbol>', description: 'show symbol-level call hints'},
+  {name: '/bg', usage: '/bg [list|<id>|run <command>|kill <id>]', description: 'manage background processes'},
+  {name: '/models_preset', usage: '/models_preset [name|server]', description: "view, apply, or clear this device's routing preset"},
+  {name: '/mode', usage: '/mode auto|ask|locked|yolo', description: 'set local tool approval mode'},
+  {name: '/scope', usage: '/scope strict|expanded', description: 'set file tool scope'},
+  {name: '/delegate', usage: '/delegate default|off|research|code|all', description: 'set delegation preference'},
+  {name: '/panel', usage: '/panel', description: 'toggle activity panel'},
+  {name: '/output', usage: '/output', description: 'toggle command output panel'},
+  {name: '/status', usage: '/status', description: 'show connection and session status'},
+  {name: '/decisions', usage: '/decisions [action]', description: 'show decision-tool guidance'},
+  {name: '/stop', usage: '/stop', description: 'stop the current turn'},
+  {name: '/clear', usage: '/clear', description: 'clear visible chat'},
+  {name: '/help', usage: '/help', description: 'show command list'},
+  {name: '/quit', usage: '/quit', description: 'exit Spore Code'},
+  {name: '/exit', usage: '/exit', description: 'exit Spore Code'}
+];
+
+export function slashCommandSuggestions(input: string, limit = 8): SlashCommand[] {
+  if (!input.startsWith('/')) return [];
+  if (/^\/\S+\s/.test(input)) return [];
+  const [head = ''] = input.trimStart().split(/\s+/, 1);
+  const query = head.toLowerCase();
+  const matches = SLASH_COMMANDS
+    .filter(command => command.name.toLowerCase().startsWith(query))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return matches.slice(0, Math.max(1, limit));
+}
+
+export function slashCommandCompletion(input: string, index = 0): string {
+  const suggestions = slashCommandSuggestions(input, Number.MAX_SAFE_INTEGER);
+  const selected = suggestions[Math.max(0, Math.min(index, suggestions.length - 1))];
+  if (!selected) return input;
+  return selected.usage.includes(' ') ? `${selected.name} ` : selected.name;
+}
+
 export interface QuestionState {
   qid: string;
   question: string;
@@ -302,7 +354,17 @@ export class SporeController extends EventEmitter {
     });
     this.appendActivity({kind: 'status', title: 'connected', detail: this.transport.baseUrl, status: 'done'});
     this.push('system', `Connected to ${this.transport.baseUrl} as ${this.cfg.connection.user} (session ${this.sessionId})`);
-    if (!pc.hasCodeIndex) void this.autoIndexCodebase();
+    if (pc.hasCodeIndex) {
+      const indexHead = pc.indexHead || '(no git head recorded)';
+      this.push(
+        'system',
+        `Code index ready (head ${indexHead}) - search_symbols / trace_calls / architecture / impact / get_snippet are available. Refreshing changed files in the background...`
+      );
+      this.appendActivity({kind: 'status', title: 'code index ready', detail: `head ${indexHead}`, status: 'done'});
+      void this.autoIndexCodebase({reason: 'auto-refresh', announce: false});
+    } else {
+      void this.autoIndexCodebase({reason: 'auto-bootstrap', announce: true});
+    }
   }
 
   private async handleFrame(frame: InboundFrame): Promise<void> {
@@ -579,14 +641,20 @@ export class SporeController extends EventEmitter {
     this.setStatus('idle');
   }
 
-  private async autoIndexCodebase(): Promise<void> {
+  private async autoIndexCodebase(options: {reason: 'auto-bootstrap' | 'auto-refresh'; announce: boolean}): Promise<void> {
     if (this.autoIndexStarted) return;
     this.autoIndexStarted = true;
-    this.push('system', 'Auto-indexing this project so the agent can use structural search.');
-    this.appendActivity({kind: 'status', title: 'auto-index started', status: 'running'});
+    if (options.announce) {
+      this.push('system', 'Auto-indexing this project so the agent can use structural search.');
+    }
+    this.appendActivity({
+      kind: 'status',
+      title: options.reason === 'auto-refresh' ? 'code index refresh started' : 'auto-index started',
+      status: 'running'
+    });
     const result = await this.executor.execute('index_codebase', {});
     if (result.claimed) {
-      this.push('system', `index_codebase\n${JSON.stringify(result.result, null, 2)}`);
+      this.push('system', formatIndexResult(options.reason, result.result));
     }
     this.setStatus('idle');
   }
@@ -1210,24 +1278,24 @@ function cleanPlanControlText(text: string): string {
 }
 
 function helpText(): string {
+  return ['Commands:', ...SLASH_COMMANDS.map(command => `${command.usage} - ${command.description}`)].join('\n');
+}
+
+function formatIndexResult(reason: 'auto-bootstrap' | 'auto-refresh', result: unknown): string {
+  const label = reason === 'auto-refresh' ? '/index (auto-refresh)' : '/index (auto-bootstrap)';
+  if (!isObject(result)) return `${label}\n${String(result)}`;
+  if (result.ok === false || result.error) return `${label} failed\n${JSON.stringify(result, null, 2)}`;
+  const scanned = Number(result.scanned || 0);
+  const parsed = Number(result.parsed || 0);
+  const symbols = Number(result.symbols || 0);
+  const byLanguage = isObject(result.byLanguage)
+    ? Object.entries(result.byLanguage).map(([language, count]) => `${language}=${count}`).join(', ')
+    : '';
   return [
-    'Commands:',
-    '/plan - toggle plan/execute mode',
-    '/new - start a fresh session in this cwd',
-    '/sessions - list saved sessions for this project',
-    '/resume <id|n> - resume a saved session',
-    '/context [refresh] - show structured project context',
-    '/tree [depth] - show project tree',
-    '/init - create SPORE.md and ignore .spore-code/',
-    '/index, /architecture, /impact <symbol>, /calls <symbol> - code index tools',
-    '/bg [list|<id>|run <command>|kill <id>] - background processes',
-    '/models_preset [name|server] - device routing preset',
-    '/mode auto|ask|locked|yolo - permission mode',
-    '/scope strict|expanded - file tool scope',
-    '/delegate default|off|research|code|all - delegation preference',
-    '/panel, /output - toggle UI panels',
-    '/status, /decisions, /stop, /clear, /quit'
-  ].join('\n');
+    `${label} - done`,
+    `scanned: ${scanned} files, parsed: ${parsed}, symbols: ${symbols}`,
+    byLanguage ? `by language: ${byLanguage}` : ''
+  ].filter(Boolean).join('\n');
 }
 
 function projectTreeString(root: string, maxDepth: number, maxEntries: number): string {

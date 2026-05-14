@@ -155,6 +155,7 @@ spore --user test-user logout # clear a different scoped device token
 ```
 
 Inside the terminal UI, type `/help` for the supported slash-command list.
+Typing `/` opens inline command suggestions; Tab completes the selected command.
 Common commands:
 
 | Command | Purpose |
@@ -169,7 +170,8 @@ Common commands:
 | `/clear` | clear the visible session |
 
 Input history is persisted in `~/.spore-code/history.jsonl`. Use Up/Down to
-walk prior prompts, and Ctrl+J to insert a newline without sending.
+walk prior prompts, and Ctrl+J to insert a newline without sending. When the
+slash-command menu is open, Up/Down selects commands instead of history.
 
 Session continuity is project-local. Each launch records the active session in
 `.spore-code/last_session.json`; `spore -c` and `auto_resume = true` prefer

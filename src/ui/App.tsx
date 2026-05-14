@@ -1,6 +1,14 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {Box, Text, useApp, useInput, useStdout} from 'ink';
-import type {ActivityEntry, ClientState, OutputEntry, SporeController} from '../controller.js';
+import {
+  slashCommandCompletion,
+  slashCommandSuggestions,
+  type ActivityEntry,
+  type ClientState,
+  type OutputEntry,
+  type SlashCommand,
+  type SporeController
+} from '../controller.js';
 
 interface Props {
   controller: SporeController;
@@ -33,12 +41,15 @@ export function App({controller}: Props) {
   const {stdout} = useStdout();
   const [state, setState] = useState<ClientState>({...controller.state, messages: [...controller.state.messages]});
   const [input, setInput] = useState('');
+  const [suggestionIndex, setSuggestionIndex] = useState(0);
   const [focus, setFocus] = useState<PanelFocus>('chat');
   const [scroll, setScroll] = useState<ScrollState>({chat: 0, activity: 0, output: 0});
 
   const columns = Math.max(80, stdout.columns || 100);
   const rows = Math.max(24, stdout.rows || 32);
   const palette = useMemo(() => paletteFor(state.theme), [state.theme]);
+  const slashSuggestions = useMemo(() => slashCommandSuggestions(input, 8), [input]);
+  const showSlashSuggestions = input.startsWith('/') && slashSuggestions.length > 0 && !state.pendingApproval && !state.pendingPlan && !state.pendingQuestion;
   const activitySide = state.activityPanelOpen && columns >= 94;
   const chatVisibleCount = Math.max(5, Math.min(18, rows - (state.outputLogOpen ? 16 : 9)));
   const activityVisibleCount = Math.max(4, Math.min(10, rows - 8));
@@ -63,6 +74,14 @@ export function App({controller}: Props) {
     }));
   }, [state.messages.length, state.activity.length, state.outputLog.length, chatVisibleCount, activityVisibleCount, outputVisibleCount]);
 
+  useEffect(() => {
+    setSuggestionIndex(0);
+  }, [input]);
+
+  useEffect(() => {
+    setSuggestionIndex(prev => clamp(prev, 0, Math.max(0, slashSuggestions.length - 1)));
+  }, [slashSuggestions.length]);
+
   const scrollPanel = (target: PanelFocus, delta: number) => {
     setScroll(prev => {
       const next = {...prev};
@@ -79,6 +98,7 @@ export function App({controller}: Props) {
   };
 
   useInput((chunk, key) => {
+    const isTab = Boolean((key as {tab?: boolean}).tab || chunk === '\t');
     if (key.ctrl && chunk === 'c') {
       if (state.generating) controller.stop();
       else {
@@ -97,7 +117,11 @@ export function App({controller}: Props) {
       setFocus('output');
       return;
     }
-    if ((key as {tab?: boolean}).tab) {
+    if (isTab && !state.pendingApproval && !state.pendingPlan && !state.pendingQuestion) {
+      if (showSlashSuggestions) {
+        setInput(prev => slashCommandCompletion(prev, suggestionIndex));
+        return;
+      }
       setFocus(prev => nextFocus(prev, state));
       return;
     }
@@ -155,6 +179,14 @@ export function App({controller}: Props) {
       }
       return;
     }
+    if (showSlashSuggestions && key.upArrow) {
+      setSuggestionIndex(prev => clamp(prev - 1, 0, slashSuggestions.length - 1));
+      return;
+    }
+    if (showSlashSuggestions && key.downArrow) {
+      setSuggestionIndex(prev => clamp(prev + 1, 0, slashSuggestions.length - 1));
+      return;
+    }
     if (key.upArrow) {
       setInput(prev => controller.historyPrevious(prev));
       return;
@@ -170,6 +202,7 @@ export function App({controller}: Props) {
     if (key.return) {
       const text = input;
       setInput('');
+      setSuggestionIndex(0);
       controller.historyReset();
       if (text.trim() === '/quit' || text.trim() === '/exit') {
         controller.close();
@@ -236,8 +269,13 @@ export function App({controller}: Props) {
       {state.usageLine && <Text color={palette.muted}>{state.usageLine}</Text>}
       <Box flexDirection="column">
         <InputBox input={input} palette={palette} />
+        {showSlashSuggestions && <SlashSuggestionPanel suggestions={slashSuggestions} selected={suggestionIndex} palette={palette} />}
         <Text color={palette.muted}>
-          {state.generating ? 'working; Ctrl+C stops' : 'Ctrl+P activity · Ctrl+O output · Tab focus · PgUp/PgDn scroll'} · focus:{focus}
+          {state.generating
+            ? 'working; Ctrl+C stops'
+            : showSlashSuggestions
+              ? 'Tab complete · Up/Down choose · Enter runs command'
+              : 'Ctrl+P activity · Ctrl+O output · Tab focus · PgUp/PgDn scroll'} · focus:{focus}
         </Text>
       </Box>
     </Box>
@@ -307,6 +345,20 @@ function InputBox({input, palette}: {input: string; palette: Palette}) {
         </Text>
       ))}
       {input.includes('\n') && <Text color={palette.muted}>multiline · Enter sends · Ctrl+J inserts another line</Text>}
+    </Box>
+  );
+}
+
+function SlashSuggestionPanel({suggestions, selected, palette}: {suggestions: SlashCommand[]; selected: number; palette: Palette}) {
+  return (
+    <Box borderStyle="single" borderColor={palette.panel} flexDirection="column" paddingX={1}>
+      {suggestions.map((command, index) => (
+        <Text key={command.name} color={index === selected ? palette.accent : palette.muted}>
+          {index === selected ? '> ' : '  '}
+          <Text color={index === selected ? palette.accent : palette.system}>{command.usage}</Text>
+          <Text color={palette.muted}> - {command.description}</Text>
+        </Text>
+      ))}
     </Box>
   );
 }
