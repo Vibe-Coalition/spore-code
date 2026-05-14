@@ -1,22 +1,23 @@
 #!/usr/bin/env sh
-# Spore Code — one-liner installer for Linux.
+# Spore Code — npm/npx installer for Linux and macOS.
 #
 #   curl -fsSL https://raw.githubusercontent.com/Vibe-Coalition/spore-code/main/install.sh | sh
 #
-# Optional overrides (pass before the pipe):
-#   SPORE_CODE_VERSION=v1.0.0    pin a specific release tag
-#   SPORE_CODE_DIR=/usr/local/bin install to a different directory
+# Optional overrides:
+#   SPORE_CODE_VERSION=beta                  install npm dist-tag/version (default: beta)
+#   SPORE_CODE_PACKAGE=@vibe-coalition/spore-code
+#   SPORE_CODE_PREFIX="$HOME/.local/share/spore-code-npm"
 #
-# Re-running upgrades in place. Same script handles a fresh install
-# and an upgrade — no extra `spore upgrade` command needed.
+# Re-running upgrades the npm package in place.
 
 set -eu
 
-REPO="Vibe-Coalition/spore-code"
-VERSION="${SPORE_CODE_VERSION:-latest}"
+PACKAGE="${SPORE_CODE_PACKAGE:-@vibe-coalition/spore-code}"
+VERSION="${SPORE_CODE_VERSION:-beta}"
+PREFIX="${SPORE_CODE_PREFIX:-}"
 BIN="spore"
+MIN_NODE_MAJOR=22
 
-# ── pretty output (best-effort; falls back to plain text without TTY) ──
 if [ -t 1 ]; then
   C_BOLD="$(printf '\033[1m')"
   C_DIM="$(printf '\033[2m')"
@@ -27,109 +28,78 @@ if [ -t 1 ]; then
 else
   C_BOLD="" C_DIM="" C_RED="" C_GREEN="" C_BLUE="" C_RESET=""
 fi
-say()  { printf "%s%s%s\n" "$C_BLUE" "→ $*" "$C_RESET"; }
-ok()   { printf "%s%s%s\n" "$C_GREEN" "✓ $*" "$C_RESET"; }
-warn() { printf "%s%s%s\n" "$C_DIM"   "  $*" "$C_RESET"; }
-die()  { printf "%s%s%s\n" "$C_RED"   "✗ $*" "$C_RESET" >&2; exit 1; }
 
-# ── platform detection ──
+say()  { printf "%s%s%s\n" "$C_BLUE" "-> $*" "$C_RESET"; }
+ok()   { printf "%s%s%s\n" "$C_GREEN" "OK $*" "$C_RESET"; }
+hint() { printf "%s%s%s\n" "$C_DIM"   "   $*" "$C_RESET"; }
+die()  { printf "%s%s%s\n" "$C_RED"   "ERR $*" "$C_RESET" >&2; exit 1; }
+
 os="$(uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]')"
 case "$os" in
-  linux)   ;;
-  darwin)  die "macOS release assets are currently paused; build from source with INCLUDE_DARWIN=1 on a host with Apple SDK." ;;
+  linux|darwin) ;;
   msys*|mingw*|cygwin*)
-    die "Detected Git-Bash / WSL — use the PowerShell installer instead:
-     irm https://raw.githubusercontent.com/Vibe-Coalition/spore-code/main/install.ps1 | iex" ;;
+    die "Detected Windows shell. Use PowerShell: irm https://raw.githubusercontent.com/Vibe-Coalition/spore-code/main/install.ps1 | iex" ;;
   *) die "Unsupported OS: $os" ;;
 esac
 
-raw_arch="$(uname -m 2>/dev/null)"
-case "$raw_arch" in
-  x86_64|amd64) arch="amd64" ;;
-  aarch64|arm64) arch="arm64" ;;
-  *) die "Unsupported architecture: $raw_arch" ;;
-esac
+command -v node >/dev/null 2>&1 || die "Node.js $MIN_NODE_MAJOR+ is required. Install it from https://nodejs.org/ and rerun this installer."
+command -v npm >/dev/null 2>&1 || die "npm is required but was not found on PATH."
 
-# ── pick a download tool ──
-if command -v curl >/dev/null 2>&1; then
-  fetch() { curl -fsSL "$1" -o "$2"; }
-  fetch_stdout() { curl -fsSL "$1"; }
-elif command -v wget >/dev/null 2>&1; then
-  fetch() { wget -q -O "$2" "$1"; }
-  fetch_stdout() { wget -q -O - "$1"; }
-else
-  die "Need curl or wget to download. Install one and retry."
+node_major="$(node -p "Number(process.versions.node.split('.')[0])" 2>/dev/null || echo 0)"
+if [ "$node_major" -lt "$MIN_NODE_MAJOR" ]; then
+  die "Node.js $MIN_NODE_MAJOR+ is required; found $(node --version)."
 fi
 
-# ── resolve version → tag (the GitHub `latest` redirect handles this for
-#    the asset URL, but we also want to surface the version we picked) ──
-if [ "$VERSION" = "latest" ]; then
-  resolved_tag="$(fetch_stdout "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
-    | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
-  if [ -n "$resolved_tag" ]; then
-    VERSION="$resolved_tag"
+if [ -n "$VERSION" ]; then
+  SPEC="$PACKAGE@$VERSION"
+else
+  SPEC="$PACKAGE"
+fi
+
+NPM_ARGS="install -g"
+if [ -n "$PREFIX" ]; then
+  mkdir -p "$PREFIX" || die "Cannot create prefix $PREFIX"
+  NPM_ARGS="$NPM_ARGS --prefix $PREFIX"
+fi
+
+say "Installing ${C_BOLD}$SPEC${C_RESET} with npm"
+# shellcheck disable=SC2086
+npm $NPM_ARGS "$SPEC" || die "npm install failed"
+
+if [ -n "$PREFIX" ]; then
+  BIN_DIR="$PREFIX/bin"
+else
+  npm_prefix="$(npm prefix -g 2>/dev/null || true)"
+  BIN_DIR="${npm_prefix%/}/bin"
+fi
+
+if command -v "$BIN" >/dev/null 2>&1; then
+  INSTALLED_BIN="$(command -v "$BIN")"
+  ok "Installed $BIN at $INSTALLED_BIN"
+else
+  ok "Installed package"
+  if [ -n "$BIN_DIR" ]; then
+    hint "$BIN_DIR is where npm should place the spore command."
+    case ":$PATH:" in
+      *":$BIN_DIR:"*) ;;
+      *)
+        hint "$BIN_DIR is not in PATH."
+        case "${SHELL##*/}" in
+          bash) rc="~/.bashrc" ;;
+          zsh)  rc="~/.zshrc" ;;
+          fish) rc="~/.config/fish/config.fish" ;;
+          *)    rc="your shell rc" ;;
+        esac
+        hint "Add this to $rc and reopen the shell:"
+        hint "  export PATH=\"$BIN_DIR:\$PATH\""
+        ;;
+    esac
   fi
 fi
 
-asset_url="https://github.com/$REPO/releases/download/$VERSION/$BIN-$os-$arch"
-[ "$VERSION" = "latest" ] && asset_url="https://github.com/$REPO/releases/latest/download/$BIN-$os-$arch"
-
-# ── pick install dir ──
-dest_dir="${SPORE_CODE_DIR:-$HOME/.local/bin}"
-mkdir -p "$dest_dir" || die "Cannot create $dest_dir"
-dest="$dest_dir/$BIN"
-
-# ── download to a temp file, verify, then atomic rename so a half-
-#    written binary can never replace a working one. ──
-tmp="$(mktemp "${TMPDIR:-/tmp}/$BIN.XXXXXX")" || die "mktemp failed"
-trap 'rm -f "$tmp"' EXIT INT TERM
-
-say "Downloading spore ${C_BOLD}$VERSION${C_RESET} for $os/$arch"
-warn "$asset_url"
-if ! fetch "$asset_url" "$tmp"; then
-  die "Download failed — check the URL above and your network."
+if command -v "$BIN" >/dev/null 2>&1; then
+  "$BIN" --version || true
 fi
 
-# Sanity-check it actually looks like a binary, not an HTML 404 page.
-head_bytes="$(head -c 4 "$tmp" 2>/dev/null | od -An -c 2>/dev/null | tr -d ' \n')"
-case "$head_bytes" in
-  "177ELF"*)         ;; # Linux ELF
-  "317372372376"*|"376372372317"*) ;; # Mach-O magic, both endianness
-  *)
-    case "$(file -b "$tmp" 2>/dev/null || echo unknown)" in
-      *ELF*|*Mach-O*) ;;
-      *) die "Downloaded file isn't a valid binary (asset missing for this platform?)" ;;
-    esac
-    ;;
-esac
-
-chmod +x "$tmp"
-
-# Move into place. If $dest exists and is the running binary on macOS
-# the rename is fine. On Linux too — rename(2) atomically swaps inode.
-if [ -e "$dest" ]; then
-  say "Replacing existing $dest"
-fi
-mv -f "$tmp" "$dest" || die "Could not write $dest (try: SPORE_CODE_DIR=/usr/local/bin sudo …)"
-trap - EXIT
-
-ok "Installed to $dest"
-
-# ── PATH advice ──
-case ":$PATH:" in
-  *":$dest_dir:"*) ;;
-  *)
-    warn "$dest_dir is not in your PATH."
-    case "${SHELL##*/}" in
-      bash) rc="~/.bashrc" ;;
-      zsh)  rc="~/.zshrc"  ;;
-      fish) rc="~/.config/fish/config.fish" ;;
-      *)    rc="your shell rc" ;;
-    esac
-    warn "Add this to $rc and reopen the shell:"
-    warn "  export PATH=\"$dest_dir:\$PATH\""
-    ;;
-esac
-
-printf "\n%sRun %sspore%s to start. First launch walks you through setup.%s\n" \
-  "$C_DIM" "$C_BOLD" "$C_RESET$C_DIM" "$C_RESET"
+printf "\n%sRun %sspore setup%s to connect to Spore Core, then %sspore%s in a project directory.%s\n" \
+  "$C_DIM" "$C_BOLD" "$C_RESET$C_DIM" "$C_BOLD" "$C_RESET$C_DIM" "$C_RESET"

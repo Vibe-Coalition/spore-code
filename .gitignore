@@ -1,4 +1,7 @@
 /spore
 /dist/
+/node_modules/
+/coverage/
+/.tsx-cache/
 /.spore-code/
 /.acorn/

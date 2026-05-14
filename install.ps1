@@ -1,119 +1,96 @@
-# Spore Code — one-liner installer for Windows.
+# Spore Code — npm/npx installer for Windows.
 #
 #   irm https://raw.githubusercontent.com/Vibe-Coalition/spore-code/main/install.ps1 | iex
 #
-# Optional overrides (set before the pipe):
-#   $env:SPORE_CODE_VERSION = 'v1.0.0'  # pin a specific release tag
-#   $env:SPORE_CODE_DIR     = 'C:\tools' # install to a different directory
+# Optional overrides:
+#   $env:SPORE_CODE_VERSION = 'beta'
+#   $env:SPORE_CODE_PACKAGE = '@vibe-coalition/spore-code'
+#   $env:SPORE_CODE_PREFIX  = "$env:LOCALAPPDATA\spore-code-npm"
 #
-# Re-running upgrades in place. Same script handles install + upgrade.
+# Re-running upgrades the npm package in place.
 
 $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$Repo    = 'Vibe-Coalition/spore-code'
-$Version = if ($env:SPORE_CODE_VERSION) { $env:SPORE_CODE_VERSION } else { 'latest' }
-$BinName = 'spore.exe'
+$Package = if ($env:SPORE_CODE_PACKAGE) { $env:SPORE_CODE_PACKAGE } else { '@vibe-coalition/spore-code' }
+$Version = if ($env:SPORE_CODE_VERSION) { $env:SPORE_CODE_VERSION } else { 'beta' }
+$Prefix = if ($env:SPORE_CODE_PREFIX) { $env:SPORE_CODE_PREFIX } else { '' }
+$MinNodeMajor = 22
 
-function Write-Step([string]$msg) { Write-Host "→ $msg" -ForegroundColor Cyan }
-function Write-Ok  ([string]$msg) { Write-Host "✓ $msg" -ForegroundColor Green }
-function Write-Hint([string]$msg) { Write-Host "  $msg" -ForegroundColor DarkGray }
-function Die       ([string]$msg) { Write-Host "✗ $msg" -ForegroundColor Red; exit 1 }
+function Write-Step([string]$msg) { Write-Host "-> $msg" -ForegroundColor Cyan }
+function Write-Ok  ([string]$msg) { Write-Host "OK $msg" -ForegroundColor Green }
+function Write-Hint([string]$msg) { Write-Host "   $msg" -ForegroundColor DarkGray }
+function Die       ([string]$msg) { Write-Host "ERR $msg" -ForegroundColor Red; exit 1 }
 
-# ── arch detection (PROCESSOR_ARCHITECTURE is reliable on every Win SKU) ──
-switch -regex ($env:PROCESSOR_ARCHITECTURE) {
-  '^(AMD64|x86_64)$' { $arch = 'amd64' }
-  '^ARM64$'          { $arch = 'arm64' }
-  default            { Die "Unsupported architecture: $env:PROCESSOR_ARCHITECTURE" }
-}
-
-# ── resolve `latest` to a real tag so we can show it to the user ──
-if ($Version -eq 'latest') {
-  try {
-    $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" `
-      -Headers @{ 'User-Agent' = 'spore-code-installer' }
-    if ($rel.tag_name) { $Version = $rel.tag_name }
-  } catch {
-    Write-Hint "Could not resolve 'latest' tag — will use the latest-redirect URL anyway."
+function Require-Command([string]$Name, [string]$InstallHint) {
+  if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
+    Die "$Name is required. $InstallHint"
   }
 }
 
-# ── pick install dir ──
-if ($env:SPORE_CODE_DIR) {
-  $DestDir = $env:SPORE_CODE_DIR
+Require-Command 'node' 'Install Node.js 22+ from https://nodejs.org/ and rerun this installer.'
+Require-Command 'npm' 'Install Node.js 22+ from https://nodejs.org/ and rerun this installer.'
+
+$nodeVersionText = (& node --version).TrimStart('v')
+$nodeMajor = [int]($nodeVersionText.Split('.')[0])
+if ($nodeMajor -lt $MinNodeMajor) {
+  Die "Node.js $MinNodeMajor+ is required; found v$nodeVersionText."
+}
+
+$Spec = if ($Version) { "$Package@$Version" } else { $Package }
+$NpmArgs = @('install', '-g')
+if ($Prefix) {
+  [void](New-Item -ItemType Directory -Path $Prefix -Force)
+  $NpmArgs += @('--prefix', $Prefix)
+}
+$NpmArgs += $Spec
+
+Write-Step "Installing $Spec with npm"
+& npm @NpmArgs
+if ($LASTEXITCODE -ne 0) { Die 'npm install failed' }
+
+if ($Prefix) {
+  $BinDir = $Prefix
 } else {
-  $DestDir = Join-Path $env:USERPROFILE '.spore-code\bin'
+  $BinDir = ''
+  try {
+    $npmPrefix = (& npm prefix -g 2>$null).Trim()
+    if ($npmPrefix) { $BinDir = $npmPrefix }
+  } catch {}
 }
-[void](New-Item -ItemType Directory -Path $DestDir -Force)
-$DestPath = Join-Path $DestDir $BinName
 
-$AssetUrl = if ($Version -eq 'latest') {
-  "https://github.com/$Repo/releases/latest/download/spore-windows-$arch.exe"
+$sporeCmd = Get-Command spore -ErrorAction SilentlyContinue
+if ($sporeCmd) {
+  Write-Ok "Installed spore at $($sporeCmd.Source)"
 } else {
-  "https://github.com/$Repo/releases/download/$Version/spore-windows-$arch.exe"
-}
-
-# ── download → temp → verify → atomic move ──
-$Tmp = Join-Path $env:TEMP ("spore-" + [Guid]::NewGuid().ToString('N') + '.exe')
-
-Write-Step "Downloading spore $Version for windows/$arch"
-Write-Hint $AssetUrl
-
-try {
-  Invoke-WebRequest -Uri $AssetUrl -OutFile $Tmp -UseBasicParsing -Headers @{ 'User-Agent' = 'spore-code-installer' }
-} catch {
-  Die "Download failed: $($_.Exception.Message)"
-}
-
-# Verify the file actually starts with the PE 'MZ' magic (catches HTML 404s).
-$head = [byte[]]::new(2)
-$fs = [IO.File]::OpenRead($Tmp)
-try { [void]$fs.Read($head, 0, 2) } finally { $fs.Close() }
-if (-not ($head[0] -eq 0x4D -and $head[1] -eq 0x5A)) {
-  Remove-Item $Tmp -Force -ErrorAction SilentlyContinue
-  Die "Downloaded file isn't a Windows binary (asset missing for this platform?)"
-}
-
-# If a previous spore.exe is in place, Windows can't replace a running
-# image — rename it aside first. Falls back to a stale .old file the
-# user can delete next reboot.
-if (Test-Path $DestPath) {
-  Write-Step "Replacing existing $DestPath"
-  $Backup = "$DestPath.old"
-  if (Test-Path $Backup) { Remove-Item $Backup -Force -ErrorAction SilentlyContinue }
-  try {
-    Move-Item $DestPath $Backup -Force
-  } catch {
-    Die "Couldn't move the existing spore.exe aside (is it open in another terminal? close spore and retry)."
+  Write-Ok 'Installed package'
+  if ($BinDir) {
+    Write-Hint "$BinDir is where npm should place the spore command."
+    $UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    if (-not $UserPath) { $UserPath = '' }
+    $onPath = ($UserPath -split ';' | Where-Object { $_ -ieq $BinDir }).Count -gt 0
+    if (-not $onPath) {
+      try {
+        $newPath = if ($UserPath.TrimEnd(';')) { "$($UserPath.TrimEnd(';'));$BinDir" } else { $BinDir }
+        [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
+        Write-Ok "Added $BinDir to your user PATH"
+        Write-Hint 'Open a new terminal for the change to take effect.'
+      } catch {
+        Write-Hint "$BinDir is not in your PATH and could not be added automatically."
+        Write-Hint 'Add it manually in System Properties -> Environment Variables -> User Path.'
+      }
+    }
   }
 }
 
-try {
-  Move-Item $Tmp $DestPath -Force
-} catch {
-  Die "Could not write $DestPath ($($_.Exception.Message))"
+$sporeCmd = Get-Command spore -ErrorAction SilentlyContinue
+if ($sporeCmd) {
+  try { & spore --version } catch {}
 }
 
-Write-Ok "Installed to $DestPath"
-
-# ── PATH advice — automatically add to per-user PATH if missing ──
-$UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-if (-not $UserPath) { $UserPath = '' }
-$onPath = ($UserPath -split ';' | Where-Object { $_ -ieq $DestDir }).Count -gt 0
-
-if (-not $onPath) {
-  $newPath = if ($UserPath.TrimEnd(';')) { "$($UserPath.TrimEnd(';'));$DestDir" } else { $DestDir }
-  try {
-    [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
-    Write-Ok "Added $DestDir to your user PATH"
-    Write-Hint "Open a new terminal for the change to take effect."
-  } catch {
-    Write-Hint "$DestDir is not in your PATH and we couldn't add it automatically."
-    Write-Hint "Add it manually: System Properties → Environment Variables → User Path."
-  }
-}
-
-Write-Host ""
-Write-Host "Run " -NoNewline -ForegroundColor DarkGray
-Write-Host "spore" -NoNewline -ForegroundColor White
-Write-Host " in a new terminal to start. First launch walks you through setup." -ForegroundColor DarkGray
+Write-Host ''
+Write-Host 'Run ' -NoNewline -ForegroundColor DarkGray
+Write-Host 'spore setup' -NoNewline -ForegroundColor White
+Write-Host ' to connect to Spore Core, then ' -NoNewline -ForegroundColor DarkGray
+Write-Host 'spore' -NoNewline -ForegroundColor White
+Write-Host ' in a project directory.' -ForegroundColor DarkGray

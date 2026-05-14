@@ -1,16 +1,16 @@
 # Architecture
 
-Spore Code is a single Go binary built around a Bubble Tea TUI. It connects to
-Spore Core, sends project context, receives chat/tool frames over WebSocket, and
-executes only the local tools it owns.
+Spore Code is an npm/npx TypeScript client built around a React Ink terminal
+UI. It connects to Spore Core, sends project context, receives chat/tool frames
+over WebSocket, and executes only the local tools it owns.
 
 ## Runtime Shape
 
 ```text
-cmd/spore/main.go
+src/bin/spore.tsx
   -> load config / run setup wizard
   -> resolve session id
-  -> create Bubble Tea model
+  -> create SporeController + Ink UI
   -> authenticate with Spore Core
   -> open WebSocket
   -> send session:start + projectContext
@@ -21,44 +21,49 @@ Key packages:
 
 | Package | Role |
 |---|---|
-| `cmd/spore` | CLI entry point, setup wizard, session picker, logout |
-| `internal/app` | TUI model, view, update loop, slash commands, modals |
-| `internal/conn` | HTTP auth, WebSocket connect/reconnect, frame routing |
-| `internal/proto` | typed protocol structs |
-| `internal/tools` | local tool ownership and implementations |
-| `internal/codeindex` | tree-sitter/source index and SQLite store |
-| `internal/config` | config file and device-token storage |
-| `internal/sessionlog` | local JSONL transcript/debug logs |
-| `internal/bg` | background process manager and child lifetime handling |
+| `src/bin` | npm binary entry point |
+| `src/ui` | React Ink terminal UI |
+| `src/controller.ts` | session orchestration, slash commands, frame handling |
+| `src/transport.ts` | HTTP auth, WebSocket connect/reconnect, frame routing |
+| `src/protocol.ts` | typed protocol interfaces |
+| `src/tools` | local tool ownership and implementations |
+| `src/project-context.ts` | structured project metadata |
+| `src/session.ts` | local JSONL transcript/debug logs |
+| `cmd`, `internal` | legacy Go client reference during the rewrite |
 
 ## Startup Flow
 
-1. Parse flags and commands in `cmd/spore/main.go`.
+1. Parse flags and commands in `src/bin/spore.tsx`.
 2. Load `~/.spore-code/config.toml` plus optional project override.
-3. Run setup wizard when config or credentials are missing.
-4. Migrate invite/password credentials to a device token when possible.
+3. Run setup wizard when config or credentials are missing, or when `spore setup`
+   is called explicitly.
+4. Exchange invite/password credentials for a device token when possible.
 5. Ensure local project directories under `.spore-code/`.
 6. Resolve the session:
    - `--session` uses an explicit id,
-   - `-c`/`--continue` resumes a project session or last session,
+   - `-c`/`--continue` resumes `.spore-code/last_session.json` when present,
+   - global last-session fallback is used only when it points at the same cwd,
    - no flag starts fresh unless `auto_resume = true`.
-7. Create the Bubble Tea model and start the TUI.
+7. Create the controller and start the Ink terminal UI.
 8. Authenticate, connect WebSocket, request history, and send `session:start`.
+
+`spore doctor` follows the same auth and WebSocket path but exits after the
+capability handshake, which makes it useful for smoke-testing a new install.
 
 ## WebSocket Client
 
-`internal/conn.Client` owns:
+`src/transport.ts` owns:
 
 - `/api/spore-code/auth` and `/api/spore-code/session` authentication,
 - `/ws?token=...` connection,
 - read loop,
-- ping loop,
 - reconnect with exponential backoff,
 - outbound outbox for frames queued during disconnect,
-- routing `tool:request` frames to the local executor.
+The controller routes `tool:request` frames to the local executor and sends
+`tool:result` frames back to Core.
 
-Normal frames go to the TUI input channel. Tool requests go to the executor
-channel so local execution does not block protocol parsing.
+Normal frames update Ink state. Tool requests run asynchronously so local
+execution does not block protocol parsing.
 
 ## Project Context
 
@@ -84,23 +89,20 @@ The context includes:
 If the server does not advertise structured project context support, the client
 uses the legacy text-prefix fallback.
 
-## TUI Model
+## Terminal UI
 
-`internal/app.Model` owns the UI state:
+`src/controller.ts` owns the session state, and `src/ui/App.tsx` renders it:
 
 - connection status and server capabilities,
 - chat messages and streaming tail,
 - current session id and cwd,
 - plan/execute mode,
-- permission, plan, and question modals,
-- code view and diff panels,
-- activity, output log, and subagent/task panels,
-- command history,
-- slash-command autocomplete,
-- theme and display toggles.
+- permission and question modals,
+- activity/status, usage, and local tool status.
 
-The update loop handles Bubble Tea messages, WebSocket frames, local tool
-results, reconnects, compaction status, and companion broadcasts.
+The previous Go/Bubble Tea UI remains as a reference while the npm UI catches
+up on polish surfaces such as code panels, autocomplete, and richer display
+settings.
 
 ## Tool Ownership
 
@@ -109,17 +111,17 @@ The executor has two explicit maps:
 - local tools Spore Code executes on the user's machine,
 - server tools that must be left for Spore Core.
 
-When a server asks for a local tool, the executor checks permission mode, runs
-the implementation, and returns `tool:result`. When a tool is server-owned or
-unknown, the CLI does not execute it locally.
+When a server asks for a local tool, the executor prompts for dangerous or
+mutating tools, runs the implementation, and returns `tool:result`. When a tool
+is server-owned or unknown, the CLI does not execute it locally.
 
 See [Tools](tools.md).
 
 ## Code Index
 
-The code index lives at `.spore-code/index.db` in the project. It is a SQLite
-database populated by `internal/codeindex` and exposed through local tools such
-as `search_symbols`, `trace_calls`, `architecture`, and `impact`.
+The npm code index lives at `.spore-code/index.json` in the project. It is
+populated by `src/tools/code-index.ts` and exposed through local tools such as
+`search_symbols`, `get_snippet`, `architecture`, and `impact`.
 
 The walker skips build/cache/vendor noise, reads regular source files only, and
 supports Go, TypeScript/JavaScript, Python, and Rust file discovery. Extractor
@@ -138,7 +140,7 @@ Useful persisted state:
 | `~/.spore-code/device_tokens.json` | fallback device-token store |
 | `~/.spore-code/sessions/` | local JSONL transcript history |
 | `~/.spore-code/logs/` | debug logs |
-| `.spore-code/index.db` | project code index |
+| `.spore-code/index.json` | npm project code index |
 | `.spore-code/plans/` | saved approved plans |
 | `.spore-code/logs/` | project exec logs |
 

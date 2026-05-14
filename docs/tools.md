@@ -2,14 +2,14 @@
 
 Spore Code is the local tool owner for CLI sessions. The server may request
 tools over WebSocket, but the CLI only executes tools listed as local in
-`internal/tools/executor.go`.
+the npm client's `src/tools/executor.ts`.
 
 ## Local Tools
 
 | Group | Tools |
 |---|---|
 | shell/files | `exec`, `read_file`, `write_file`, `edit_file`, `glob`, `grep` |
-| structured file/git | `list_dir`, `read_many_files`, `git_status`, `git_diff`, `patch_file` |
+| structured file/git | `list_dir`, `read_many_files`, `git_status`, `git_diff` |
 | tests/background | `run_tests`, `bg_list`, `bg_tail`, `bg_kill` |
 | code index | `index_codebase`, `search_symbols`, `get_snippet`, `architecture`, `trace_calls`, `impact`, `verify_implementation`, `code_overview`, `trace_path`, `code_diff` |
 
@@ -34,20 +34,19 @@ Spore Code does not execute server tools locally. Examples include:
 If the server requests a server-owned or unknown tool, the CLI leaves it for
 Spore Core instead of pretending to run it locally.
 
-## Permission Modes
+## Permissions
 
 Set with `/mode`:
 
 | Mode | Behavior |
 |---|---|
-| `auto` | auto-approve normal tools |
-| `ask` | prompt before each tool |
-| `locked` | deny tools |
-| `yolo` | auto-approve including dangerous commands |
-| `rules` | follow per-tool allow/deny rules |
+| `auto` | prompt only for dangerous or mutating tools |
+| `ask` | prompt before every local tool |
+| `locked` | allow read-only tools, block mutating tools |
+| `yolo` | run local tools without prompting |
 
-Dangerous tools and command patterns can still trigger permission UI depending
-on mode and rules.
+Dangerous tools include `exec`, `powershell_exec`, `write_file`, `edit_file`,
+`patch_file`, `run_tests`, and `bg_kill`.
 
 ## Scope Modes
 
@@ -88,36 +87,24 @@ Background process output can be inspected and killed through `/bg` or the
 Large files over the read cap are rejected with guidance to use shell range
 commands or grep. Writes and edits mark code-index files dirty where relevant.
 
-## Patch And Tests
+## Tests
 
-`patch_file` applies a git-style patch after validating paths and running a
-check. `run_tests` chooses a default test command from common project files or
-uses the provided command.
+`run_tests` chooses a default test command from common project files or uses the
+provided command. `patch_file` applies git-style patches after validating paths
+and `git apply --check`.
 
 ## Code Index Tools
 
-`/index` and `index_codebase` populate `.spore-code/index.db`. Index-backed
+`/index` and `index_codebase` populate `.spore-code/index.json`. Index-backed
 tools let the agent inspect structure without repeatedly reading entire files:
 
 - `search_symbols`: find symbols by name/kind/file/language,
 - `get_snippet`: return a symbol body or file range,
-- `trace_calls`: callers/callees,
-- `architecture`: entry points, clusters, hot paths, tech stack,
-- `impact`: transitive caller blast radius for current diff,
+- `trace_calls`: symbol-level hints while full call-graph parity is expanded,
+- `architecture`: files, symbol counts, hot paths, tech stack hints,
+- `impact`: symbol-level blast-radius hints,
 - `verify_implementation`: check whether expected artifacts exist and are wired,
 - `code_overview`, `trace_path`, `code_diff`: graph-oriented code analysis.
 
-## Delegation Policy
-
-`/delegate` configures whether server-side delegation is allowed:
-
-| Mode | Behavior |
-|---|---|
-| `default` | research/background allowed, main orchestration stays local |
-| `off` | no delegation |
-| `research` | only research-style delegation |
-| `code` | research plus parallel code work |
-| `all` | unrestricted delegation |
-
-The CLI intercepts `delegate_task` requests to enforce the selected policy
-before the server handles them.
+The previous Go client's SQLite index remains in-tree as a compatibility
+reference while the TypeScript indexer catches up.

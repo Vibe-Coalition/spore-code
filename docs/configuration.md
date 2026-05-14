@@ -27,7 +27,10 @@ show_usage = true
 auto_resume = false
 ```
 
-The setup wizard writes this file with `0600` permissions.
+The setup wizard masks invite keys and passwords while you type. It writes this
+file with `0600` permissions. `spore setup` reruns the wizard, and normal launch
+falls back to setup when the configured auth method is missing the required
+credential material.
 
 ## Connection
 
@@ -46,15 +49,19 @@ steady state is `auth_method = "device"` plus a device token stored separately.
 
 ## Device Tokens
 
-Device tokens are stored through the OS keychain when available:
+The npm client stores device tokens in `~/.spore-code/device_tokens.json` with
+`0600` permissions. The file is keyed by host, port, and username. `spore
+logout` clears local token material for the configured tuple; `--host`, `--port`,
+and `--user` can target a different saved token. After logout, config returns to
+`auth_method = "device"` with no token, so the next launch cleanly starts setup
+instead of attempting an empty invite or password login.
 
-- macOS: `security` generic password,
-- Linux: `secret-tool`,
-- other platforms: fallback JSON file.
-
-The fallback file is `~/.spore-code/device_tokens.json` and is written with
-`0600` permissions. `spore logout` asks the server to revoke the token and then
-removes local token material.
+Use `spore doctor` or `spore check` to verify the configured Core URL,
+authentication, WebSocket session ticket, and advertised capabilities without
+opening a chat UI. Use `spore smoke` for the wider beta smoke: auth, websocket,
+capabilities, session start, history request/response, and the manual live-turn
+checklist.
+Use `spore help` or `spore --help` for the full CLI command list.
 
 ## Display
 
@@ -65,54 +72,49 @@ removes local token material.
 | `show_tools` | show tool/file activity |
 | `show_usage` | show token/iteration usage after turns |
 
-Display settings can also be changed through slash commands such as `/theme` and
-`/display`.
+Display settings are currently read from config. Runtime slash commands focus on
+session behavior, local tool approvals, scope, code-index helpers, and routing
+presets.
 
 ## Session
 
 `auto_resume = false` means a plain `spore` launch creates a fresh timestamped
 session. Use `spore -c` or `spore --session <id>` to resume.
 
-`auto_resume = true` restores the older deterministic session behavior for a
-given user and cwd.
+`auto_resume = true` behaves like `spore -c`: it prefers
+`.spore-code/last_session.json`, then a global last-session pointer for the same
+cwd, then the deterministic legacy id for the current user/project.
 
 ## Project Config And State
 
 Project-local `.spore-code/` holds:
 
 - optional `config.toml` overrides,
-- `index.db`,
+- `index.json` for the npm client's TypeScript code index,
+- `last_session.json` for project-local continuation,
 - saved plans,
 - project logs and scratch state.
 
-Run `/init` to create `SPORE.md` and add `.spore-code/` to `.gitignore`.
+The legacy Go client may still create `index.db` while it remains in-tree as a
+reference implementation.
+
+Global `~/.spore-code/` holds credentials, session transcripts, debug logs, and
+the npm client's command history file.
 
 ## Environment Variables
 
 | Variable | Purpose |
 |---|---|
 | `SPORE_CODE_ALLOW_INSECURE_AUTH` | allow credentials over non-local HTTP |
-| `SPORE_CODE_VERSION` | installer version pin |
-| `SPORE_CODE_DIR` | installer destination |
-| `SPORE_CODE_UPDATE_BINARY` | explicit local update binary |
-| `SPORE_CODE_UPDATE_DIR` | local update directory |
-| `SPORE_CODE_STAGE_UPDATE` | set `0` to skip staging release binary |
-| `GO` | Go binary for build scripts |
-| `ZIG` | Zig binary for CGO fallback/cross-compile |
-| `VERSION` | version stamp for `make build`/`make release` |
-| `INCLUDE_DARWIN` | include Darwin targets in release build |
+| `NODE_OPTIONS` | optional Node runtime flags |
+| `npm_config_prefix` | npm global install location |
 
 ## Routing Presets
 
-`/models_preset` fetches server routing presets and applies a preset only for
-this device. `/models_preset server` clears the device override and returns to
-server routing.
-
-The client tries multiple route variants for compatibility:
-
-- `/api/spore-code/routing-presets`,
-- `/api/plugins/spore-code/routing-presets`,
-- `/api/models/routing-presets`.
+The npm client keeps the existing server-side device routing contract. The
+interactive preset picker from the Go client has not been reintroduced yet; the
+Core protocol and device token shape remain compatible so it can be added
+without a server migration.
 
 ## Insecure Transport Guard
 
