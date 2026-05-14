@@ -40,6 +40,22 @@ ok()   { printf "%s%s%s\n" "$C_GREEN" "OK $*" "$C_RESET"; }
 hint() { printf "%s%s%s\n" "$C_DIM"   "   $*" "$C_RESET"; }
 die()  { printf "%s%s%s\n" "$C_RED"   "ERR $*" "$C_RESET" >&2; exit 1; }
 
+fetch() {
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$1" -o "$2"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q -O "$2" "$1"
+  else
+    die "Need curl or wget to download the GitHub source fallback."
+  fi
+}
+
+prepare_source() {
+  src="$1"
+  say "Preparing source in $src"
+  (cd "$src" && npm install && npm run build) || die "Could not prepare local package source."
+}
+
 os="$(uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]')"
 case "$os" in
   linux|darwin) ;;
@@ -71,10 +87,21 @@ esac
 case "$SOURCE" in
   local)
     [ -f "$SCRIPT_DIR/package.json" ] || die "Local install requested, but package.json was not found next to install.sh."
+    prepare_source "$SCRIPT_DIR"
     SPEC="$SCRIPT_DIR"
     ;;
   github)
-    SPEC="https://github.com/$REPO/archive/refs/heads/$REF.tar.gz"
+    command -v tar >/dev/null 2>&1 || die "tar is required for GitHub source fallback."
+    tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/spore-code.XXXXXX")" || die "mktemp failed"
+    archive="$tmp_dir/source.tar.gz"
+    url="https://github.com/$REPO/archive/refs/heads/$REF.tar.gz"
+    say "Downloading source fallback from $url"
+    fetch "$url" "$archive" || die "Could not download GitHub source fallback."
+    tar -xzf "$archive" -C "$tmp_dir" || die "Could not extract GitHub source fallback."
+    src_dir="$(find "$tmp_dir" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+    [ -n "$src_dir" ] || die "GitHub source fallback archive was empty."
+    prepare_source "$src_dir"
+    SPEC="$src_dir"
     ;;
   npm)
     if [ -n "$VERSION" ]; then SPEC="$PACKAGE@$VERSION"; else SPEC="$PACKAGE"; fi

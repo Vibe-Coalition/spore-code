@@ -68,6 +68,7 @@ Downloaded zip or local checkout on Windows:
 
 ```powershell
 .\install.cmd
+& "$env:APPDATA\npm\spore.cmd" # works immediately if this terminal PATH is stale
 ```
 
 If you want to run the PowerShell file directly, use a process-local execution
@@ -78,8 +79,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
 The installers require Node.js 22+. In a downloaded zip or local checkout they
-install from the local folder. In one-liner mode they install from the GitHub
-branch tarball until the npm beta package is published.
+run `npm install`, build the local client, and install from that folder. In
+one-liner mode they download/build the GitHub branch until the npm beta package
+is published.
 
 Optional overrides:
 

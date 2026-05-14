@@ -37,6 +37,19 @@ function Require-Command([string]$Name, [string]$InstallHint) {
   }
 }
 
+function Prepare-Source([string]$SourceDir) {
+  Write-Step "Preparing source in $SourceDir"
+  Push-Location $SourceDir
+  try {
+    & npm install
+    if ($LASTEXITCODE -ne 0) { Die 'npm install failed while preparing source.' }
+    & npm run build
+    if ($LASTEXITCODE -ne 0) { Die 'npm run build failed while preparing source.' }
+  } finally {
+    Pop-Location
+  }
+}
+
 Require-Command 'node' 'Install Node.js 22+ from https://nodejs.org/ and rerun this installer.'
 Require-Command 'npm' 'Install Node.js 22+ from https://nodejs.org/ and rerun this installer.'
 
@@ -65,10 +78,21 @@ switch ($Source) {
     if (-not (Test-Path (Join-Path $PSScriptRoot 'package.json'))) {
       Die 'Local install requested, but package.json was not found next to install.ps1.'
     }
+    Prepare-Source $PSScriptRoot
     $Spec = $PSScriptRoot
   }
   'github' {
-    $Spec = "https://github.com/$Repo/archive/refs/heads/$Ref.tar.gz"
+    $TempRoot = Join-Path ([IO.Path]::GetTempPath()) ('spore-code-' + [Guid]::NewGuid().ToString('N'))
+    [void](New-Item -ItemType Directory -Path $TempRoot -Force)
+    $Archive = Join-Path $TempRoot 'source.zip'
+    $Url = "https://codeload.github.com/$Repo/zip/refs/heads/$Ref"
+    Write-Step "Downloading source fallback from $Url"
+    Invoke-WebRequest -Uri $Url -OutFile $Archive -UseBasicParsing -Headers @{ 'User-Agent' = 'spore-code-installer' }
+    Expand-Archive -Path $Archive -DestinationPath $TempRoot -Force
+    $SourceDir = Get-ChildItem -Path $TempRoot -Directory | Select-Object -First 1
+    if (-not $SourceDir) { Die 'GitHub source fallback archive was empty.' }
+    Prepare-Source $SourceDir.FullName
+    $Spec = $SourceDir.FullName
   }
   'npm' {
     $Spec = if ($Version) { "$Package@$Version" } else { $Package }
@@ -112,6 +136,7 @@ if ($sporeCmd) {
     $UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     if (-not $UserPath) { $UserPath = '' }
     $onPath = ($UserPath -split ';' | Where-Object { $_ -ieq $BinDir }).Count -gt 0
+    $onCurrentPath = (($env:Path -split ';' | Where-Object { $_ -ieq $BinDir }).Count -gt 0)
     if (-not $onPath) {
       try {
         $newPath = if ($UserPath.TrimEnd(';')) { "$($UserPath.TrimEnd(';'));$BinDir" } else { $BinDir }
@@ -122,6 +147,10 @@ if ($sporeCmd) {
         Write-Hint "$BinDir is not in your PATH and could not be added automatically."
         Write-Hint 'Add it manually in System Properties -> Environment Variables -> User Path.'
       }
+    } elseif (-not $onCurrentPath) {
+      Write-Hint "$BinDir is already in your user PATH, but this terminal has not picked it up."
+      Write-Hint 'Open a new terminal, or run this now:'
+      Write-Hint "& `"$BinDir\spore.cmd`""
     }
   }
 }

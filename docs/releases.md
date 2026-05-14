@@ -90,6 +90,7 @@ Downloaded zip or local checkout on Windows:
 ```powershell
 .\install.cmd
 powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+& "$env:APPDATA\npm\spore.cmd" # works immediately if this terminal PATH is stale
 ```
 
 Do not tag the npm package as `latest` until the beta survives real Core
