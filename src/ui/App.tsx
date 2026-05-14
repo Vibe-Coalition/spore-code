@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {Box, Text, useApp, useInput, useStdout} from 'ink';
 import {
   slashCommandCompletion,
@@ -6,7 +6,6 @@ import {
   type ActivityEntry,
   type ClientState,
   type OutputEntry,
-  type SlashCommand,
   type SporeController
 } from '../controller.js';
 
@@ -35,6 +34,8 @@ interface Palette {
   tool: string;
   panel: string;
 }
+
+const COMPOSER_LINES = 10;
 
 export function App({controller}: Props) {
   const {stdout} = useStdout();
@@ -139,7 +140,6 @@ export function App({controller}: Props) {
         setFocus={setFocus}
         scrollPanel={scrollPanel}
         scrollTo={scrollTo}
-        palette={palette}
       />
     </Box>
   );
@@ -152,26 +152,37 @@ interface ComposerProps {
   setFocus: React.Dispatch<React.SetStateAction<PanelFocus>>;
   scrollPanel: (target: PanelFocus, delta: number) => void;
   scrollTo: (target: PanelFocus, value: number) => void;
-  palette: Palette;
 }
 
-function Composer({controller, state, focus, setFocus, scrollPanel, scrollTo, palette}: ComposerProps) {
+function Composer({controller, state, focus, setFocus, scrollPanel, scrollTo}: ComposerProps) {
   const app = useApp();
-  const [input, setInput] = useState('');
-  const [suggestionIndex, setSuggestionIndex] = useState(0);
-  const slashSuggestions = useMemo(() => slashCommandSuggestions(input, 8), [input]);
-  const showSlashSuggestions = input.startsWith('/') && slashSuggestions.length > 0 && !state.pendingApproval && !state.pendingPlan && !state.pendingQuestion;
+  const inputRef = useRef('');
+  const suggestionIndexRef = useRef(0);
+  const previousComposerLinesRef = useRef(COMPOSER_LINES);
+
+  const drawComposer = () => {
+    if (!process.stdout.isTTY) return;
+    const lines = renderComposerLines({
+      input: inputRef.current,
+      suggestionIndex: suggestionIndexRef.current,
+      state,
+      focus,
+      width: process.stdout.columns || 100
+    });
+    process.stdout.write(erasePreviousLines(previousComposerLinesRef.current) + lines.join('\n') + '\n');
+    previousComposerLinesRef.current = lines.length;
+  };
 
   useEffect(() => {
-    setSuggestionIndex(0);
-  }, [input]);
-
-  useEffect(() => {
-    setSuggestionIndex(prev => clamp(prev, 0, Math.max(0, slashSuggestions.length - 1)));
-  }, [slashSuggestions.length]);
+    previousComposerLinesRef.current = COMPOSER_LINES;
+    drawComposer();
+  });
 
   useInput((chunk, key) => {
     const isTab = Boolean((key as {tab?: boolean}).tab || chunk === '\t');
+    const input = inputRef.current;
+    const slashSuggestions = slashCommandSuggestions(input, 8);
+    const showSlashSuggestions = input.startsWith('/') && slashSuggestions.length > 0 && !state.pendingApproval && !state.pendingPlan && !state.pendingQuestion;
     if (key.ctrl && chunk === 'c') {
       if (state.generating) controller.stop();
       else {
@@ -192,7 +203,9 @@ function Composer({controller, state, focus, setFocus, scrollPanel, scrollTo, pa
     }
     if (isTab && !state.pendingApproval && !state.pendingPlan && !state.pendingQuestion) {
       if (showSlashSuggestions) {
-        setInput(prev => slashCommandCompletion(prev, suggestionIndex));
+        inputRef.current = slashCommandCompletion(inputRef.current, suggestionIndexRef.current);
+        suggestionIndexRef.current = 0;
+        drawComposer();
         return;
       }
       setFocus(prev => nextFocus(prev, state));
@@ -223,14 +236,19 @@ function Composer({controller, state, focus, setFocus, scrollPanel, scrollTo, pa
     if (state.pendingPlan) {
       if (state.pendingPlan.awaitingFeedback) {
         if (key.ctrl && (chunk === 'j' || chunk === '\n')) {
-          setInput(prev => `${prev}\n`);
+          inputRef.current = `${inputRef.current}\n`;
+          drawComposer();
         } else if (key.return) {
-          controller.resolvePlan('revise', input.trim());
-          setInput('');
+          controller.resolvePlan('revise', inputRef.current.trim());
+          inputRef.current = '';
+          suggestionIndexRef.current = 0;
+          drawComposer();
         } else if (key.backspace || key.delete) {
-          setInput(prev => prev.slice(0, -1));
+          inputRef.current = inputRef.current.slice(0, -1);
+          drawComposer();
         } else if (chunk && !key.ctrl && !key.meta) {
-          setInput(prev => prev + chunk);
+          inputRef.current += chunk;
+          drawComposer();
         }
         return;
       }
@@ -241,41 +259,54 @@ function Composer({controller, state, focus, setFocus, scrollPanel, scrollTo, pa
     }
     if (state.pendingQuestion) {
       if (key.ctrl && (chunk === 'j' || chunk === '\n')) {
-        setInput(prev => `${prev}\n`);
+        inputRef.current = `${inputRef.current}\n`;
+        drawComposer();
       } else if (key.return) {
-        controller.answerQuestion(input.trim());
-        setInput('');
+        controller.answerQuestion(inputRef.current.trim());
+        inputRef.current = '';
+        suggestionIndexRef.current = 0;
+        drawComposer();
       } else if (key.backspace || key.delete) {
-        setInput(prev => prev.slice(0, -1));
+        inputRef.current = inputRef.current.slice(0, -1);
+        drawComposer();
       } else if (chunk && !key.ctrl && !key.meta) {
-        setInput(prev => prev + chunk);
+        inputRef.current += chunk;
+        drawComposer();
       }
       return;
     }
     if (showSlashSuggestions && key.upArrow) {
-      setSuggestionIndex(prev => clamp(prev - 1, 0, slashSuggestions.length - 1));
+      suggestionIndexRef.current = clamp(suggestionIndexRef.current - 1, 0, slashSuggestions.length - 1);
+      drawComposer();
       return;
     }
     if (showSlashSuggestions && key.downArrow) {
-      setSuggestionIndex(prev => clamp(prev + 1, 0, slashSuggestions.length - 1));
+      suggestionIndexRef.current = clamp(suggestionIndexRef.current + 1, 0, slashSuggestions.length - 1);
+      drawComposer();
       return;
     }
     if (key.upArrow) {
-      setInput(prev => controller.historyPrevious(prev));
+      inputRef.current = controller.historyPrevious(inputRef.current);
+      suggestionIndexRef.current = 0;
+      drawComposer();
       return;
     }
     if (key.downArrow) {
-      setInput(controller.historyNext());
+      inputRef.current = controller.historyNext();
+      suggestionIndexRef.current = 0;
+      drawComposer();
       return;
     }
     if (key.ctrl && (chunk === 'j' || chunk === '\n')) {
-      setInput(prev => `${prev}\n`);
+      inputRef.current = `${inputRef.current}\n`;
+      drawComposer();
       return;
     }
     if (key.return) {
-      const text = input;
-      setInput('');
-      setSuggestionIndex(0);
+      const text = inputRef.current;
+      inputRef.current = '';
+      suggestionIndexRef.current = 0;
+      drawComposer();
       controller.historyReset();
       if (text.trim() === '/quit' || text.trim() === '/exit') {
         controller.close();
@@ -286,25 +317,92 @@ function Composer({controller, state, focus, setFocus, scrollPanel, scrollTo, pa
       return;
     }
     if (key.backspace || key.delete) {
-      setInput(prev => prev.slice(0, -1));
+      inputRef.current = inputRef.current.slice(0, -1);
+      drawComposer();
       return;
     }
-    if (chunk && !key.ctrl && !key.meta) setInput(prev => prev + chunk);
+    if (chunk && !key.ctrl && !key.meta) {
+      inputRef.current += chunk;
+      suggestionIndexRef.current = 0;
+      drawComposer();
+    }
   });
 
   return (
     <Box flexDirection="column">
-      <InputBox input={input} palette={palette} />
-      {showSlashSuggestions && <SlashSuggestionPanel suggestions={slashSuggestions} selected={suggestionIndex} palette={palette} />}
-      <Text color={palette.muted}>
-        {state.generating
-          ? 'working; Ctrl+C stops'
-          : showSlashSuggestions
-            ? 'Tab complete · Up/Down choose · Enter runs command'
-            : 'Ctrl+P activity · Ctrl+O output · Tab focus · PgUp/PgDn scroll'} · focus:{focus}
-      </Text>
+      {Array.from({length: COMPOSER_LINES}, (_, index) => <Text key={index}> </Text>)}
     </Box>
   );
+}
+
+function renderComposerLines({
+  input,
+  suggestionIndex,
+  state,
+  focus,
+  width
+}: {
+  input: string;
+  suggestionIndex: number;
+  state: ClientState;
+  focus: PanelFocus;
+  width: number;
+}): string[] {
+  const safeWidth = Math.max(40, width);
+  const innerWidth = safeWidth - 2;
+  const border = `+${'-'.repeat(innerWidth)}+`;
+  const lines: string[] = [border];
+  const inputLines = input.split('\n').slice(-3);
+  const visibleInput = inputLines.length ? inputLines : [''];
+  for (let i = 0; i < 3; i++) {
+    const prefix = i === 0 ? '> ' : '. ';
+    lines.push(frameLine(`${prefix}${visibleInput[i] || ''}`, innerWidth));
+  }
+  lines.push(border);
+
+  const suggestions = slashCommandSuggestions(input, 8);
+  const showSuggestions = input.startsWith('/') && suggestions.length > 0 && !state.pendingApproval && !state.pendingPlan && !state.pendingQuestion;
+  if (showSuggestions) {
+    lines.push(rawLine('Tab complete - Up/Down choose - Enter runs command', safeWidth));
+    suggestions.slice(0, 4).forEach((command, index) => {
+      const marker = index === suggestionIndex ? '> ' : '  ';
+      lines.push(rawLine(`${marker}${command.usage} - ${command.description}`, safeWidth));
+    });
+  } else {
+    const hint = state.generating
+      ? 'working; Ctrl+C stops'
+      : 'Ctrl+P activity - Ctrl+O output - Tab focus - PgUp/PgDn scroll';
+    lines.push(rawLine(`${hint} - focus:${focus}`, safeWidth));
+    if (state.pendingPlan?.awaitingFeedback) lines.push(rawLine('Type revision feedback and press Enter.', safeWidth));
+    else if (state.pendingQuestion) lines.push(rawLine('Type an answer or option number and press Enter.', safeWidth));
+    else if (input.includes('\n')) lines.push(rawLine('multiline - Enter sends - Ctrl+J inserts another line', safeWidth));
+  }
+
+  while (lines.length < COMPOSER_LINES) lines.push(' '.repeat(safeWidth));
+  return lines.slice(0, COMPOSER_LINES).map(line => rawLine(line, safeWidth));
+}
+
+function erasePreviousLines(count: number): string {
+  if (count <= 0) return '';
+  let out = '';
+  for (let i = 0; i < count; i++) out += '\x1b[1A\x1b[2K';
+  return `${out}\r`;
+}
+
+function frameLine(text: string, innerWidth: number): string {
+  const fitted = fitPlain(text, innerWidth - 2);
+  return `| ${fitted}${' '.repeat(Math.max(0, innerWidth - 2 - fitted.length))} |`;
+}
+
+function rawLine(text: string, width: number): string {
+  const fitted = fitPlain(text, width);
+  return `${fitted}${' '.repeat(Math.max(0, width - fitted.length))}`;
+}
+
+function fitPlain(text: string, width: number): string {
+  if (text.length <= width) return text;
+  if (width <= 3) return '.'.repeat(Math.max(0, width));
+  return `${text.slice(0, width - 3)}...`;
 }
 
 function PanelHeader({label, count, scroll, palette, focused}: {label: string; count: number; scroll: number; palette: Palette; focused: boolean}) {
@@ -353,35 +451,6 @@ function OutputPanel({entries, offset, visibleCount, focused, palette}: {entries
       {visible.map(entry => (
         <Text key={entry.id} color={palette.muted}>
           {formatTime(entry.timestamp)} {entry.source}: {clip(entry.text.replace(/\r?\n/g, ' | '), 180)}
-        </Text>
-      ))}
-    </Box>
-  );
-}
-
-function InputBox({input, palette}: {input: string; palette: Palette}) {
-  const lines = input.split('\n');
-  return (
-    <Box borderStyle="single" borderColor={input.includes('\n') ? palette.accent : palette.border} flexDirection="column" paddingX={1}>
-      {lines.map((line, i) => (
-        <Text key={i}>
-          <Text color={palette.success}>{i === 0 ? '> ' : '. '}</Text>
-          {line || ' '}
-        </Text>
-      ))}
-      {input.includes('\n') && <Text color={palette.muted}>multiline · Enter sends · Ctrl+J inserts another line</Text>}
-    </Box>
-  );
-}
-
-function SlashSuggestionPanel({suggestions, selected, palette}: {suggestions: SlashCommand[]; selected: number; palette: Palette}) {
-  return (
-    <Box borderStyle="single" borderColor={palette.panel} flexDirection="column" paddingX={1}>
-      {suggestions.map((command, index) => (
-        <Text key={command.name} color={index === selected ? palette.accent : palette.muted}>
-          {index === selected ? '> ' : '  '}
-          <Text color={index === selected ? palette.accent : palette.system}>{command.usage}</Text>
-          <Text color={palette.muted}> - {command.description}</Text>
         </Text>
       ))}
     </Box>
