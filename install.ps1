@@ -2,6 +2,10 @@
 #
 #   irm https://raw.githubusercontent.com/Vibe-Coalition/spore-code/main/install.ps1 | iex
 #
+# Local checkout / downloaded zip:
+#   .\install.cmd
+#   powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+#
 # Optional overrides:
 #   $env:SPORE_CODE_VERSION = 'beta'
 #   $env:SPORE_CODE_PACKAGE = '@vibe-coalition/spore-code'

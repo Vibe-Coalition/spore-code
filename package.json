@@ -9,6 +9,7 @@
   "files": [
     "dist/bin",
     "install.sh",
+    "install.cmd",
     "install.ps1",
     "README.md",
     "LICENSE",

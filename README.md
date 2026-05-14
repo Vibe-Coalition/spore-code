@@ -64,6 +64,19 @@ Windows PowerShell:
 irm https://raw.githubusercontent.com/Vibe-Coalition/spore-code/main/install.ps1 | iex
 ```
 
+Downloaded zip or local checkout on Windows:
+
+```powershell
+.\install.cmd
+```
+
+If you want to run the PowerShell file directly, use a process-local execution
+policy bypass:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+```
+
 The installers require Node.js 22+ and install the npm beta package by default.
 Optional overrides:
 

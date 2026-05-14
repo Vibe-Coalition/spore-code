@@ -79,6 +79,13 @@ Windows PowerShell:
 irm https://raw.githubusercontent.com/Vibe-Coalition/spore-code/main/install.ps1 | iex
 ```
 
+Downloaded zip or local checkout on Windows:
+
+```powershell
+.\install.cmd
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+```
+
 Do not tag the npm package as `latest` until the beta survives real Core
 sessions and Windows shell smoke tests.
 
